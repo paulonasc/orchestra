@@ -6,11 +6,17 @@ description: Multi-agent coordination through files. Memory, threads, briefings,
 ## Preamble (run first)
 
 ```bash
-_UPD=$(__ORCHESTRA_BIN__/orchestra-update-check 2>/dev/null || true)
+_UPD=$(/Users/paulonasc/Documents/orchestra/bin/orchestra-update-check 2>/dev/null || true)
 [ -n "$_UPD" ] && echo "$_UPD" || true
 ```
 
-If output shows `UPGRADE_AVAILABLE <old> <new>`: tell the user "Orchestra update available: v{old} → v{new}. Run `/o update` to upgrade." Then continue normally.
+If output shows `UPGRADE_AVAILABLE <old> <new>`: tell the user "Orchestra update available: v{old} → v{new}" and ask if they want to update now. If yes, run:
+
+```bash
+cd /Users/paulonasc/Documents/orchestra && git pull origin main && ./setup link "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+```
+
+Then tell the user "Updated to v{new}" and continue. If no, continue without updating.
 
 If no output, Orchestra is up to date — continue silently.
 
@@ -33,143 +39,40 @@ Store the resolved path. All paths below are relative to this `.orchestra/` root
 
 ## The /o command
 
-`/o` is the executive dashboard. It answers: "Where are we? What's at risk? What needs my attention?" — in 5 seconds.
-
-### Subcommands
-
-| Command | Like | What it does |
-|---------|------|-------------|
-| `/o` | — | Executive dashboard (default) |
-| `/o list` | `ls` | List all threads with status and progress |
-| `/o active` | `pwd` | Show what the agent thinks we're working on right now |
-| `/o <thread>` | `cd` + `ls` | Deep dive into a specific thread/workstream |
-| `/o update` | `apt upgrade` | Pull latest Orchestra and sync all repos |
-
-### `/o` — Executive dashboard
-
-Read all Orchestra state files and render a **top-down** dashboard. Start high-level, then drill down. The user should understand the project in 5 seconds from the top section alone.
-
-**Section 1 — Roadmap (where are we?)**
-
-Show all milestones from `progress.yaml` with full names, progress bars, and a "you are here" marker:
-
-```
-## Roadmap
-
-M0  Scaffolding & CI/CD   ████████░░  87%  (26/30)  ← you are here
-M1  Core Features          ░░░░░░░░░░   0%  (0/15)
-M2  Launch & Hardening     ░░░░░░░░░░   0%  (0/8)
-```
-
-If milestones don't have descriptions in `progress.yaml`, derive them from thread specs.
-
-**Section 2 — Needs your attention**
-
-Surface only things that require the human's input or approval:
-
-```
-## Needs your attention
-
-⚠ 2 verification items PENDING — need AWS credentials (infra terraform validate/plan)
-⚠ Decision needed — CI/CD provider (GitHub Actions vs CircleCI) not yet decided
-📬 3 new handoffs since last session
-```
-
-Categories: blocked items needing human action, pending verification needing manual testing or credentials, undecided decisions, unread handoffs.
-
-**Section 3 — Recently completed**
-
-What shipped since the user last checked. Pull from today's daily log and recent handoffs:
-
-```
-## Recently completed
-
-- API scaffold: NestJS + Kysely + health endpoint (api)
-- Frontend scaffold: Next.js + Tailwind + shadcn (frontend)
-- Infra: Terraform modules for ECS, RDS, ElastiCache (infra)
-```
-
-**Section 4 — Risks**
-
-Read `## Risks` from active thread specs. Surface any identified risks:
-
-```
-## Risks
-
-- Terraform state drift if multiple agents run apply concurrently (infra)
-- No staging environment yet — can't integration test across repos
-```
-
-If no risks section exists in any active thread, skip this section silently.
-
-**Section 5 — Recent decisions**
-
-Show the last 3-5 decisions from `decisions/` with their reasoning:
-
-```
-## Recent decisions
-
-001 us-west-2 — Chose us-west-2 for all AWS services. Reason: lowest latency to west coast users, broadest service availability.
-```
-
-**Footer — drill down**
-
-```
-Threads: /o list  |  Focus: /o active  |  Detail: /o <thread-name>
-```
-
-### `/o list` — List all threads
-
-Scan `threads/` and render a summary table:
-
-```
-## Threads
-
-001  honestclaw-mvp      M0 87% | M1 0%    3 repos    active
-002  payment-integration  planning           1 repo     paused
-003  mobile-app           research            2 repos    blocked
-```
-
-Show: thread number, name, milestone progress, repos affected, current status (active/paused/blocked/done).
-
-### `/o active` — What are we working on?
-
-Read `state/active-thread.md` and `state/session-context.md`. Show:
-
-```
-## Active
-
-Thread: 001-honestclaw-mvp
-Milestone: M0 — Scaffolding & CI/CD (87%)
-Current focus: Building GitHub Actions CI/CD pipelines for API and frontend
-Next steps: M0.27 API CI/CD, M0.28 Frontend CI/CD
-```
-
-If `session-context.md` exists and is recent, include the key context and current state from it.
-
-### `/o <thread-name>` — Thread deep dive
-
-Read the thread's `spec.md`, `verification.md`, `conversation.md`, and related `handoffs/`. Render:
-
-1. **Spec summary** — problem, approach, acceptance criteria
-2. **Risks** — from `## Risks` in spec
-3. **Alternatives considered** — from `## Alternatives` in spec (what was rejected and why)
-4. **Verification status** — automated and manual test results
-5. **Progress** — milestone items for this thread with status
-6. **Handoffs** — recent handoffs related to this thread
-7. **Decisions** — decisions tagged with this thread
-
-### `/o update` — Upgrade Orchestra
+When the user invokes `/o update`, skip the dashboard and run the upgrade immediately:
 
 ```bash
-cd __ORCHESTRA_DIR__ && git pull origin main && ./setup sync
+cd /Users/paulonasc/Documents/orchestra && git pull origin main && ./setup link "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ```
 
-Pulls latest Orchestra and re-links all known repos (skills, hooks, templates). Reports version change.
+Report the version change and continue.
+
+When the user invokes `/o` (no arguments), present a dashboard:
+
+1. Read `state/progress.yaml` — show current milestone status (% complete, blocked items)
+2. Read `state/active-thread.md` — show what's currently being worked on
+3. Scan `handoffs/` for any unread handoffs (files created since last session)
+4. Read `state/blocked.yaml` for blocked items
+5. Present a concise status summary:
+
+```
+## Orchestra Status
+
+**Active:** 003-compress-video-pipeline
+**Progress:** MVP milestone — 4/7 done, 1 blocked
+**Handoffs:** 1 new (api → frontend: new endpoints ready)
+**Blocked:** frontend auth — waiting on API key rotation
+
+Next steps:
+- Read handoff from API team
+- Unblock auth by...
+```
+
+Suggest concrete next steps based on what you see. If nothing is active, ask what the user wants to work on.
 
 ### Post-work audit
 
-When `/o` detects that agents have finished work (new handoffs exist, progress was updated since last session), also audit Orchestra state:
+When the user invokes `/o` after agents have finished work (handoffs exist, progress updated), also audit Orchestra state:
 
 1. Read all `verification.md` files for active threads — flag any with FAILs or PENDINGs
 2. Check if MEMORY.md was updated with new learnings
@@ -215,7 +118,7 @@ When the user describes new work ("I want to build X", "we need to fix Y"), crea
 1. Look at existing directories in `threads/` to find the next sequential number
 2. Zero-pad to 3 digits: `001`, `002`, `003`
 3. Create `threads/NNN-slug/` with:
-   - `spec.md` — what to build, acceptance criteria, alternatives considered, risks
+   - `spec.md` — what to build, acceptance criteria, constraints
    - `conversation.md` — design discussion log (append-only)
    - `verification.md` — test checklist and results (created when work begins)
    - `research.md` — optional, create when research is needed
@@ -340,9 +243,7 @@ After automated tests pass (or for items that can't be automated), ask the user:
 **Date:** YYYY-MM-DD
 **Context:** Why this decision was needed
 **Decision:** What was decided
-**Alternatives:** What else was considered and why it was rejected
-**Reason:** Why this option over the alternatives
-**Risks:** Tradeoffs or risks of this choice
+**Reason:** Why this option was chosen over alternatives
 **Affects:** What parts of the system this impacts
 ```
 
@@ -440,35 +341,19 @@ Handoffs are append-only records. Never overwrite or delete them. Do not skip wr
 Update `state/progress.yaml` when items are completed or blocked.
 
 ```yaml
-milestones:
-  - name: M0
-    description: Scaffolding & CI/CD
-    thread: 001-honestclaw-mvp
-    items:
-      - name: API scaffold
-        status: done
-        repo: api
-      - name: Frontend scaffold
-        status: done
-        repo: frontend
-      - name: CI/CD pipelines
-        status: todo
-        repo: all
-  - name: M1
-    description: Core Features
-    thread: 001-honestclaw-mvp
-    items:
-      - name: Auth token rotation
-        status: blocked
-        repo: api
-        blocked_by: infrastructure team
-        reason: Waiting on new KMS key provisioning
-      - name: Integration tests
-        status: todo
-        repo: all
+milestone: MVP
+items:
+  - name: API compression endpoint
+    status: done
+  - name: Frontend upload UI
+    status: in_progress
+  - name: Auth token rotation
+    status: blocked
+    blocked_by: infrastructure team
+    reason: Waiting on new KMS key provisioning
+  - name: Integration tests
+    status: todo
 ```
-
-Each milestone has a `name`, `description` (human-readable), and optional `thread` reference. Each item has a `status`, `repo`, and optional `blocked_by`/`reason`.
 
 Valid statuses: `todo`, `in_progress`, `done`, `blocked`. Blocked items must include `blocked_by` and `reason`.
 

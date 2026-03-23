@@ -30,6 +30,7 @@ Orchestra — multi-agent coordination through files.
 Usage:
   ./setup init [path]         Create .orchestra/ at path (default: cwd)
   ./setup link <repo> [orch]  Link a repo to an .orchestra/ directory
+  ./setup sync [orch]         Re-link all known repos (after update)
   ./setup help                Show this message
 
 Examples:
@@ -92,6 +93,7 @@ MEMEOF
     cat > "$orch_dir/.gitignore" << 'GIEOF'
 .logs/
 inject/
+linked-repos
 GIEOF
     echo "  Created .gitignore"
   fi
@@ -190,6 +192,13 @@ cmd_link() {
     "$ORCHESTRA_DIR/SKILL.md" > "$repo_path/.claude/skills/o/SKILL.md"
   echo "  Installed skill pack to .claude/skills/o/"
 
+  # Record repo in linked-repos manifest (for sync)
+  local manifest="$orch_dir/linked-repos"
+  if [ ! -f "$manifest" ] || ! grep -qxF "$repo_path" "$manifest"; then
+    echo "$repo_path" >> "$manifest"
+    echo "  Registered in linked-repos manifest"
+  fi
+
   echo ""
   green "Linked! Open Claude Code in $(basename "$repo_path") and type /o"
 }
@@ -270,11 +279,71 @@ MANUAL
 }
 
 # ============================================================
+# SYNC — re-link all known repos (after update)
+# ============================================================
+cmd_sync() {
+  local orch_dir=""
+
+  # Find .orchestra/ from current directory or explicit arg
+  if [ -n "${1:-}" ]; then
+    local explicit="${1/#\~/$HOME}"
+    if [ -d "$explicit/.orchestra" ]; then
+      orch_dir="$(cd "$explicit/.orchestra" && pwd)"
+    elif [ -d "$explicit" ] && [ -f "$explicit/MEMORY.md" ]; then
+      orch_dir="$(cd "$explicit" && pwd)"
+    fi
+  else
+    # Try to find from cwd
+    local dir="$(pwd)"
+    while [ "$dir" != "/" ]; do
+      if [ -f "$dir/.orchestra.link" ]; then
+        orch_dir="$(grep "^root:" "$dir/.orchestra.link" 2>/dev/null | sed 's/^root: *//' | sed "s|^~|$HOME|")"
+        break
+      fi
+      if [ -d "$dir/.orchestra" ]; then
+        orch_dir="$(cd "$dir/.orchestra" && pwd)"
+        break
+      fi
+      dir="$(dirname "$dir")"
+    done
+  fi
+
+  if [ -z "$orch_dir" ] || [ ! -d "$orch_dir" ]; then
+    red "Error: could not find .orchestra/ directory"
+    exit 1
+  fi
+
+  local manifest="$orch_dir/linked-repos"
+  if [ ! -f "$manifest" ]; then
+    yellow "No linked repos found in $orch_dir/linked-repos"
+    exit 0
+  fi
+
+  bold "Syncing all linked repos from $orch_dir"
+  echo ""
+
+  local count=0
+  while IFS= read -r repo; do
+    [ -z "$repo" ] && continue
+    if [ -d "$repo" ]; then
+      cmd_link "$repo" "$orch_dir"
+      count=$((count + 1))
+    else
+      yellow "  Skipping $repo (directory not found)"
+    fi
+  done < "$manifest"
+
+  echo ""
+  green "Synced $count repos"
+}
+
+# ============================================================
 # Main — route subcommand
 # ============================================================
 case "${1:-help}" in
   init)  shift; cmd_init "${1:-}" ;;
   link)  shift; cmd_link "$@" ;;
+  sync)  shift; cmd_sync "${1:-}" ;;
   help|-h|--help) usage ;;
   *)
     red "Unknown command: $1"

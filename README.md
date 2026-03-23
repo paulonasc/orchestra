@@ -106,9 +106,17 @@ Orchestra uses a single `.orchestra/` directory at your project root (or a share
 
 ### Skills vs Hooks
 
-Skills are intelligence — the agent decides when and how to use them. `/o plan`, `/o brief`, `/o handoff`.
+Skills are intelligence — the agent decides when and how to use them.
 
-Hooks are mechanics — deterministic, fires every time, never forgotten. `SessionStart` injects memory. `PostCommit` captures session logs. You don't invoke hooks. They just run.
+| Command | What it does |
+|---------|-------------|
+| `/o` | Executive dashboard — roadmap, risks, what needs your attention |
+| `/o list` | List all threads with status and progress |
+| `/o active` | What the agent thinks we're working on right now |
+| `/o <thread>` | Deep dive into a specific workstream |
+| `/o update` | Pull latest Orchestra and sync all repos |
+
+Hooks are mechanics — deterministic, fires every time, never forgotten. `SessionStart` injects memory. `Stop` captures session boundaries. You don't invoke hooks. They just run.
 
 ### Memory
 
@@ -137,7 +145,12 @@ A thread is any unit of work — a feature, a bug, a spike, an investigation. It
 
 ### Verification
 
-Every thread has a `verification.md` that tracks whether the work actually works. Checklist items map 1:1 to acceptance criteria in `spec.md`. Each item is PASS, FAIL, or PENDING — with evidence. A progress item can't be marked `done` until all verification items PASS. This is the gate between "code was written" and "done."
+Every thread has a `verification.md` — the gate between "code was written" and "done." Two phases:
+
+1. **Automated** — agent runs test suites, typecheck, lint, API smoke tests, browser QA. No human needed.
+2. **Human-assisted** — agent tells you exactly what to manually test, what to look for, and what context to feed back (logs, screenshots, errors).
+
+A progress item can't be marked `done` until all verification items PASS.
 
 ### Briefings
 
