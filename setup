@@ -172,10 +172,10 @@ cmd_link() {
   # Install hooks in repo's .claude/settings.json
   install_hooks "$repo_path"
 
-  # Copy SKILL.md into repo's .claude/skills/orchestra/
-  mkdir -p "$repo_path/.claude/skills/orchestra"
-  cp "$ORCHESTRA_DIR/SKILL.md" "$repo_path/.claude/skills/orchestra/SKILL.md"
-  echo "  Installed skill pack to .claude/skills/orchestra/"
+  # Copy SKILL.md into repo's .claude/skills/o/
+  mkdir -p "$repo_path/.claude/skills/o"
+  cp "$ORCHESTRA_DIR/SKILL.md" "$repo_path/.claude/skills/o/SKILL.md"
+  echo "  Installed skill pack to .claude/skills/o/"
 
   echo ""
   green "Linked! Open Claude Code in $(basename "$repo_path") and type /o"
@@ -210,25 +210,26 @@ install_hooks() {
   jq 'if .hooks == null then .hooks = {} else . end' "$tmp_file" > "${tmp_file}.2" && mv "${tmp_file}.2" "$tmp_file"
 
   # Add each hook (idempotent — skips if command already present)
-  local -A hook_map=(
-    ["SessionStart|startup|resume"]="orchestra-session-start.sh"
-    ["SessionStart|compact"]="orchestra-post-compact.sh"
-    ["PreCompact|"]="orchestra-pre-compact.sh"
-    ["Stop|"]="orchestra-stop.sh"
-    ["SubagentStop|"]="orchestra-subagent-stop.sh"
+  local hook_keys=(
+    "SessionStart|startup|resume|orchestra-session-start.sh"
+    "SessionStart|compact|orchestra-post-compact.sh"
+    "PreCompact||orchestra-pre-compact.sh"
+    "Stop||orchestra-stop.sh"
+    "SubagentStop||orchestra-subagent-stop.sh"
   )
 
-  for key in "${!hook_map[@]}"; do
-    local event="${key%%|*}"
-    local matcher="${key#*|}"
-    local script="${hook_map[$key]}"
+  for entry in "${hook_keys[@]}"; do
+    local event="${entry%%|*}"
+    local rest="${entry#*|}"
+    local matcher="${rest%|*}"
+    local script="${rest##*|}"
     local cmd="bash ${HOOKS_DIR}/${script}"
 
     jq --arg event "$event" --arg matcher "$matcher" --arg cmd "$cmd" '
-      if (.hooks[$event] // [] | map(select(.command == $cmd)) | length) == 0 then
+      if (.hooks[$event] // [] | map(select(.hooks[]?.command == $cmd)) | length) == 0 then
         .hooks[$event] = (.hooks[$event] // []) + [{
           "matcher": $matcher,
-          "command": $cmd
+          "hooks": [{"type": "command", "command": $cmd}]
         }]
       else . end
     ' "$tmp_file" > "${tmp_file}.2" && mv "${tmp_file}.2" "$tmp_file"
@@ -244,12 +245,12 @@ print_manual_hooks() {
   {
     "hooks": {
       "SessionStart": [
-        { "matcher": "startup|resume", "command": "bash ${HOOKS_DIR}/orchestra-session-start.sh" },
-        { "matcher": "compact", "command": "bash ${HOOKS_DIR}/orchestra-post-compact.sh" }
+        { "matcher": "startup|resume", "hooks": [{"type": "command", "command": "bash ${HOOKS_DIR}/orchestra-session-start.sh"}] },
+        { "matcher": "compact", "hooks": [{"type": "command", "command": "bash ${HOOKS_DIR}/orchestra-post-compact.sh"}] }
       ],
-      "PreCompact": [{ "matcher": "", "command": "bash ${HOOKS_DIR}/orchestra-pre-compact.sh" }],
-      "Stop": [{ "matcher": "", "command": "bash ${HOOKS_DIR}/orchestra-stop.sh" }],
-      "SubagentStop": [{ "matcher": "", "command": "bash ${HOOKS_DIR}/orchestra-subagent-stop.sh" }]
+      "PreCompact": [{ "matcher": "", "hooks": [{"type": "command", "command": "bash ${HOOKS_DIR}/orchestra-pre-compact.sh"}] }],
+      "Stop": [{ "matcher": "", "hooks": [{"type": "command", "command": "bash ${HOOKS_DIR}/orchestra-stop.sh"}] }],
+      "SubagentStop": [{ "matcher": "", "hooks": [{"type": "command", "command": "bash ${HOOKS_DIR}/orchestra-subagent-stop.sh"}] }]
     }
   }
 MANUAL

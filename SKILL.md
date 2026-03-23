@@ -1,7 +1,6 @@
 ---
-name: orchestra
+name: o
 description: Multi-agent coordination through files. Memory, threads, briefings, handoffs.
-command: /o
 ---
 
 # Orchestra
@@ -14,8 +13,7 @@ Read `.orchestra.link` in the current repo root to find the `.orchestra/` direct
 
 ```yaml
 # .orchestra.link
-orchestra: ../orchestra-workspace/.orchestra
-repo: pied-piper-api
+root: /Users/richard/Projects/pied-piper/.orchestra
 ```
 
 If `.orchestra/` exists directly in the repo root, use that. If neither `.orchestra/` nor `.orchestra.link` exists, Orchestra is not set up for this repo — tell the user.
@@ -53,9 +51,15 @@ Suggest concrete next steps based on what you see. If nothing is active, ask wha
 
 - Lives at `.orchestra/MEMORY.md`
 - Keep under 200 lines
-- Write durable facts: architecture decisions, patterns, gotchas, conventions, preferences
-- When you learn something durable about the project, append to MEMORY.md immediately. Do not wait.
-- Periodically prune stale entries to stay under the line limit
+- Write durable facts: architecture decisions, patterns, gotchas, conventions, user preferences
+
+**YOU MUST update MEMORY.md during every session where you learn something new about the project.** This includes:
+- Tech stack choices (language, framework, database, ORM, etc.)
+- Architecture patterns adopted (error format, auth approach, test strategy)
+- User preferences discovered (editor, region, naming conventions)
+- Gotchas encountered (things that broke, things that surprised you)
+
+Do not wait until the end of the session. Write to MEMORY.md as you go. If you finish a session and MEMORY.md is still empty, you did it wrong.
 
 ### memory/YYYY-MM-DD.md — daily append-only log
 
@@ -97,7 +101,7 @@ When the user describes new work ("I want to build X", "we need to fix Y"), crea
 
 ## Decisions
 
-When the user commits to a decision ("let's use X", "we decided Y"), record it:
+**YOU MUST record decisions as they happen.** When the user commits to a choice — "let's use X", "we decided Y", choosing a framework, picking a region, selecting an approach over alternatives — create a decision file immediately. Do not wait until the end of the session. If the session involved choices and `decisions/` is still empty, you did it wrong.
 
 1. Look at existing files in `decisions/` to find the next sequential number
 2. Create `decisions/NNN-slug.md` with this format:
@@ -222,7 +226,7 @@ Valid statuses: `todo`, `in_progress`, `done`, `blocked`. Blocked items must inc
 
 - The Stop hook auto-captures session end times to the daily log
 - Before ending a session, write a substantive work summary to `memory/YYYY-MM-DD.md`
-- If significant work was done (feature built, major refactor, architecture change), write a full session log to `sessions/YYYY-MM-DD-slug.md`
+- **YOU MUST write a session log to `sessions/YYYY-MM-DD-slug.md`** when significant work was done: feature built, major refactor, architecture change, multi-repo scaffold, milestone completed. A session log is a curated narrative — what was built, why, what decisions were made, what's next. If you scaffolded an entire milestone and `sessions/` is empty, you did it wrong.
 
 ## Rules
 

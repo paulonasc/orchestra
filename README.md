@@ -33,26 +33,30 @@ No orchestration server. No message queue. Files on disk, read by agents.
 
 ## Install — 30 seconds
 
-Open Claude Code and paste this. Claude does the rest.
+**Step 1:** Clone Orchestra to a permanent location.
 
-> Install Orchestra: run `git clone https://github.com/orchestrahq/orchestra.git /tmp/orchestra`. Then ask me where I want to create the `.orchestra/` coordination directory (this is where all shared memory, threads, decisions, and handoffs live). Run `/tmp/orchestra/setup init <path>` with my answer. Then ask me which repos I want to link to this Orchestra project — I can give you one repo or many, and they can be anywhere on disk. For each repo I give you, run `/tmp/orchestra/setup link <repo-path> <orchestra-path>`. After linking, add an "Orchestra" section to each repo's CLAUDE.md that says: this project uses Orchestra for multi-agent coordination, the `/o` command shows project status, memory and progress are auto-injected via hooks, and when finishing work always write a handoff if the next agent needs context.
+```bash
+git clone https://github.com/orchestrahq/orchestra.git ~/.orchestra
+```
 
-That's it. Claude clones Orchestra, asks where your repos are, links them, and sets up hooks. Every future session in any linked repo starts with full project context.
+**Step 2:** Open Claude Code and paste this. Claude does the rest.
+
+> Set up Orchestra. It's installed at `~/.orchestra`. Ask me: "What repos do you want to coordinate? Give me the full paths, a parent directory, or just one repo." If I give one repo, run `~/.orchestra/setup init <repo-path>` then `~/.orchestra/setup link <repo-path>`. If I give multiple repos or a directory containing repos, run `~/.orchestra/setup init <parent-directory>` (use the directory I gave you, or the common parent of the repos), then run `~/.orchestra/setup link <repo-path>` for each repo. After linking, add an "Orchestra" section to each repo's CLAUDE.md that says: this repo uses Orchestra for multi-agent coordination, the `/o` command shows status, memory and progress are auto-injected via hooks, and when finishing work always write a handoff if the next agent needs context.
+
+Claude asks for your repos, figures out the right setup, links everything, and installs hooks. Every future session starts with full project context — no commands needed.
 
 ### Manual install
 
-If you prefer doing it yourself:
-
 ```bash
-git clone https://github.com/orchestrahq/orchestra.git /tmp/orchestra
+git clone https://github.com/orchestrahq/orchestra.git ~/.orchestra
 
 # 1. Create .orchestra/ wherever you want
-/tmp/orchestra/setup init ~/Projects/pied-piper
+~/.orchestra/setup init ~/Projects/pied-piper
 
 # 2. Link repos — they don't need to be in the same directory
-/tmp/orchestra/setup link ~/Projects/pied-piper-api
-/tmp/orchestra/setup link ~/Work/pied-piper-frontend
-/tmp/orchestra/setup link /opt/repos/pied-piper-infra
+~/.orchestra/setup link ~/Projects/pied-piper-api
+~/.orchestra/setup link ~/Work/pied-piper-frontend
+~/.orchestra/setup link /opt/repos/pied-piper-infra
 ```
 
 Each linked repo gets:
