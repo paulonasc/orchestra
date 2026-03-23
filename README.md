@@ -74,6 +74,7 @@ Orchestra uses a single `.orchestra/` directory at your project root (or a share
 .orchestra/
 ├── orchestra.yaml          # project config
 ├── MEMORY.md               # curated long-term memory
+├── BACKLOG.md              # project-wide tech debt, future work, investigations
 ├── memory/                 # daily logs (auto-captured)
 │   ├── 2026-03-20.md
 │   └── 2026-03-21.md
@@ -141,7 +142,7 @@ Long sessions get compacted by Claude Code — the conversation is summarized an
 
 - The agent maintains `state/session-context.md` — a volatile scratchpad updated after every significant action (not at the end, not before compaction, but continuously)
 - `PreCompact` hook echoes session context into the compaction input so the summarizer preserves it
-- `PostCompact` hook re-injects session context + memory + progress from disk
+- `PostCompact` hook re-injects session context + memory + progress + backlog from disk
 
 No manual intervention. No "write this down before it compacts." The context is already on disk because the agent keeps it current. For an explicit full save, `/o checkpoint` flushes everything — session context, progress, verification, daily log, memory — in one shot.
 
@@ -191,6 +192,12 @@ See briefing for updated types.
 ```
 
 The receiving agent picks this up at session start. No Slack message. No copy-paste.
+
+### Backlog
+
+`BACKLOG.md` lives at the `.orchestra/` root — a project-wide list of tech debt, future improvements, and things to investigate. The problem it solves: agents working on thread A discover something for thread B, write it in thread A's conversation.md, and it's never seen again. The backlog is the escape hatch.
+
+Auto-injected at session start (after active thread and progress — it's background reference, not active context). Three categories: **Future improvements**, **Tech debt**, **Investigate**. One line per item with a thread reference back to full context. Cap at 50 items. When an item gets prioritized, it graduates to a full thread — remove it from the backlog.
 
 ### Documentation sync
 

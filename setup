@@ -84,6 +84,20 @@ MEMEOF
     echo "  Created MEMORY.md"
   fi
 
+  # BACKLOG.md
+  if [ ! -f "$orch_dir/BACKLOG.md" ]; then
+    cat > "$orch_dir/BACKLOG.md" << 'BLEOF'
+# Backlog
+
+## Future improvements
+
+## Tech debt
+
+## Investigate
+BLEOF
+    echo "  Created BACKLOG.md"
+  fi
+
   # state files
   # Note: progress.yaml is per-thread (threads/NNN-slug/progress.yaml), not global
   [ ! -f "$orch_dir/state/blocked.yaml" ] && echo "blocked: []" > "$orch_dir/state/blocked.yaml" && echo "  Created state/blocked.yaml"

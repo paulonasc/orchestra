@@ -854,6 +854,52 @@ If compaction happens and `state/session-context.md` is empty or stale, you will
 
 **If you finished significant work and docs are unchanged, ask yourself: "Would the next agent or user reading these docs be misled?" If yes, update them.**
 
+## Backlog
+
+`BACKLOG.md` lives at the `.orchestra/` root. It's the project-wide list of future work, tech debt, and things to revisit. Every agent sees it at session start. Thread-local notes get buried — the backlog doesn't.
+
+### When to add to the backlog
+
+**Any time you or the user identifies something as "do later", "investigate", "tech debt", "future improvement", or "revisit" — add it to `BACKLOG.md` immediately.** Don't only write it in the thread's conversation.md or spec.md. Those are invisible to agents working on other threads.
+
+### Format
+
+```markdown
+# Backlog
+
+## Future improvements
+
+- **Structured identity graph from Instagram tags** — extract `taggedUsers` from JSONB into junction table for fast graph queries. All raw data preserved, can backfill anytime. Thread: `001-instagram-integration` | Priority: when identity graph becomes product focus
+
+- **Redis caching for API responses** — high-traffic endpoints hitting DB on every request. Thread: `003-api-performance` | Priority: before launch
+
+## Tech debt
+
+- **Duplicate email validation logic** — exists in both `lib/auth/` and `lib/onboarding/`. Should consolidate. Thread: `002-auth-migration` | Priority: low
+
+## Investigate
+
+- **WebSocket vs SSE for real-time updates** — currently polling every 10s. Worth investigating if user count grows. Thread: none | Priority: post-MVP
+```
+
+### Rules
+
+- **One line per item** — title, brief context, thread reference, priority. The thread has the full details.
+- **Always include `Thread: NNN-slug`** if the item came from a thread. This is the pointer back to full context.
+- **Three categories:** `Future improvements` (features to build), `Tech debt` (code to fix), `Investigate` (unknowns to research)
+- **Keep it under 50 items.** If it's growing past that, some items should become threads with plans.
+- **Remove items when they become threads.** Once work is actively planned, it moves from backlog to a thread — don't track in both places.
+
+### `/o` dashboard integration
+
+The `/o` dashboard should include a **Backlog** count in the footer when items exist:
+
+```
+📋 3 backlog items — see BACKLOG.md
+```
+
+Don't dump the full backlog into the dashboard — just surface the count. The backlog is reference material, not active work.
+
 ## Rules
 
 - Do NOT modify `.orchestra/` files that are not part of your current task
