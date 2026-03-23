@@ -1,0 +1,269 @@
+#!/bin/bash
+set -euo pipefail
+
+# --- Colors ---
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+green()  { printf "${GREEN}%s${RESET}\n" "$1"; }
+yellow() { printf "${YELLOW}%s${RESET}\n" "$1"; }
+red()    { printf "${RED}%s${RESET}\n" "$1"; }
+bold()   { printf "${BOLD}%s${RESET}\n" "$1"; }
+
+ORCHESTRA_DIR="$(cd "$(dirname "$0")" && pwd)"
+HOOKS_DIR="$ORCHESTRA_DIR/hooks"
+
+# --- Resolve path (expand ~ and make absolute) ---
+resolve_path() {
+  local p="${1/#\~/$HOME}"
+  cd "$p" 2>/dev/null && pwd
+}
+
+# --- Usage ---
+usage() {
+  cat << 'EOF'
+Orchestra — multi-agent coordination through files.
+
+Usage:
+  ./setup init [path]         Create .orchestra/ at path (default: cwd)
+  ./setup link <repo> [orch]  Link a repo to an .orchestra/ directory
+  ./setup help                Show this message
+
+Examples:
+  # Single repo
+  ./setup init
+  ./setup link .
+
+  # Multi-repo — repos can be anywhere
+  ./setup init ~/Projects/pied-piper
+  ./setup link ~/Projects/pied-piper-api
+  ./setup link ~/Work/pied-piper-frontend
+  ./setup link /opt/repos/pied-piper-infra
+
+  # Link to a specific .orchestra/ (if you have multiple projects)
+  ./setup link ~/Work/frontend ~/Projects/pied-piper/.orchestra
+EOF
+  exit 0
+}
+
+# ============================================================
+# INIT — create .orchestra/ directory
+# ============================================================
+cmd_init() {
+  local target="${1:-$(pwd)}"
+  target="$(resolve_path "$target")" || {
+    red "Error: directory does not exist: $1"
+    exit 1
+  }
+
+  local orch_dir="$target/.orchestra"
+
+  bold "Initializing Orchestra in $orch_dir"
+  echo ""
+
+  # Create directory structure
+  mkdir -p "$orch_dir"/{memory,state,decisions,threads,briefings,sessions,handoffs,templates,inject,.logs}
+
+  # MEMORY.md
+  if [ ! -f "$orch_dir/MEMORY.md" ]; then
+    cat > "$orch_dir/MEMORY.md" << 'MEMEOF'
+# Project Memory
+
+## Architecture
+
+## Patterns
+
+## Preferences
+
+## Gotchas
+MEMEOF
+    echo "  Created MEMORY.md"
+  fi
+
+  # state files
+  [ ! -f "$orch_dir/state/progress.yaml" ] && echo "milestones: {}" > "$orch_dir/state/progress.yaml" && echo "  Created state/progress.yaml"
+  [ ! -f "$orch_dir/state/blocked.yaml" ] && echo "blocked: []" > "$orch_dir/state/blocked.yaml" && echo "  Created state/blocked.yaml"
+
+  # .gitignore
+  if [ ! -f "$orch_dir/.gitignore" ]; then
+    cat > "$orch_dir/.gitignore" << 'GIEOF'
+.logs/
+inject/
+GIEOF
+    echo "  Created .gitignore"
+  fi
+
+  # Copy templates
+  if [ -d "$ORCHESTRA_DIR/templates" ]; then
+    cp -n "$ORCHESTRA_DIR/templates/"* "$orch_dir/templates/" 2>/dev/null || true
+    echo "  Copied templates"
+  fi
+
+  # Init git repo
+  if [ ! -d "$orch_dir/.git" ]; then
+    git -C "$orch_dir" init -q
+    git -C "$orch_dir" add -A
+    git -C "$orch_dir" commit -q -m "Initialize Orchestra"
+    echo "  Initialized git repo"
+  fi
+
+  echo ""
+  green "Orchestra initialized at $orch_dir"
+  echo ""
+  echo "  Next: link your repos with"
+  echo "    ./setup link /path/to/your/repo"
+}
+
+# ============================================================
+# LINK — connect a repo to an .orchestra/ directory
+# ============================================================
+cmd_link() {
+  local repo_path="${1:-}"
+  if [ -z "$repo_path" ]; then
+    red "Error: repo path required"
+    echo "  Usage: ./setup link <repo> [orchestra-dir]"
+    exit 1
+  fi
+
+  repo_path="$(resolve_path "$repo_path")" || {
+    red "Error: repo does not exist: $1"
+    exit 1
+  }
+
+  # Find .orchestra/ — explicit arg, or auto-detect
+  local orch_dir=""
+  if [ -n "${2:-}" ]; then
+    # Explicit path — could be the .orchestra/ dir or its parent
+    local explicit="${2/#\~/$HOME}"
+    if [ -d "$explicit/.orchestra" ]; then
+      orch_dir="$(cd "$explicit/.orchestra" && pwd)"
+    elif [ -d "$explicit" ] && [ -f "$explicit/MEMORY.md" ]; then
+      orch_dir="$(cd "$explicit" && pwd)"
+    else
+      red "Error: no .orchestra/ found at $2"
+      exit 1
+    fi
+  else
+    # Auto-detect: check repo itself, then parent, then grandparent
+    for candidate in "$repo_path" "$repo_path/.." "$repo_path/../.."; do
+      if [ -d "$candidate/.orchestra" ]; then
+        orch_dir="$(cd "$candidate/.orchestra" && pwd)"
+        break
+      fi
+    done
+
+    if [ -z "$orch_dir" ]; then
+      red "Error: no .orchestra/ found near $repo_path"
+      echo "  Run './setup init' first, or specify the path:"
+      echo "  ./setup link $repo_path /path/to/.orchestra"
+      exit 1
+    fi
+  fi
+
+  bold "Linking $(basename "$repo_path") → $orch_dir"
+
+  # Write .orchestra.link
+  echo "root: $orch_dir" > "$repo_path/.orchestra.link"
+  echo "  Created $repo_path/.orchestra.link"
+
+  # Install hooks in repo's .claude/settings.json
+  install_hooks "$repo_path"
+
+  # Copy SKILL.md into repo's .claude/skills/orchestra/
+  mkdir -p "$repo_path/.claude/skills/orchestra"
+  cp "$ORCHESTRA_DIR/SKILL.md" "$repo_path/.claude/skills/orchestra/SKILL.md"
+  echo "  Installed skill pack to .claude/skills/orchestra/"
+
+  echo ""
+  green "Linked! Open Claude Code in $(basename "$repo_path") and type /o"
+}
+
+# ============================================================
+# Install hooks into a repo's .claude/settings.json
+# ============================================================
+install_hooks() {
+  local repo="$1"
+  local settings_dir="$repo/.claude"
+  local settings_file="$settings_dir/settings.json"
+
+  mkdir -p "$settings_dir"
+
+  if ! command -v jq &>/dev/null; then
+    yellow "  jq not found — printing hooks for manual install:"
+    print_manual_hooks
+    return
+  fi
+
+  local tmp_file
+  tmp_file="$(mktemp)"
+
+  if [ -f "$settings_file" ] && [ -s "$settings_file" ]; then
+    cp "$settings_file" "$tmp_file"
+  else
+    echo '{}' > "$tmp_file"
+  fi
+
+  # Ensure hooks object exists
+  jq 'if .hooks == null then .hooks = {} else . end' "$tmp_file" > "${tmp_file}.2" && mv "${tmp_file}.2" "$tmp_file"
+
+  # Add each hook (idempotent — skips if command already present)
+  local -A hook_map=(
+    ["SessionStart|startup|resume"]="orchestra-session-start.sh"
+    ["SessionStart|compact"]="orchestra-post-compact.sh"
+    ["PreCompact|"]="orchestra-pre-compact.sh"
+    ["Stop|"]="orchestra-stop.sh"
+    ["SubagentStop|"]="orchestra-subagent-stop.sh"
+  )
+
+  for key in "${!hook_map[@]}"; do
+    local event="${key%%|*}"
+    local matcher="${key#*|}"
+    local script="${hook_map[$key]}"
+    local cmd="bash ${HOOKS_DIR}/${script}"
+
+    jq --arg event "$event" --arg matcher "$matcher" --arg cmd "$cmd" '
+      if (.hooks[$event] // [] | map(select(.command == $cmd)) | length) == 0 then
+        .hooks[$event] = (.hooks[$event] // []) + [{
+          "matcher": $matcher,
+          "command": $cmd
+        }]
+      else . end
+    ' "$tmp_file" > "${tmp_file}.2" && mv "${tmp_file}.2" "$tmp_file"
+  done
+
+  mv "$tmp_file" "$settings_file"
+  echo "  Hooks installed to $settings_file"
+}
+
+print_manual_hooks() {
+  cat << MANUAL
+  Add to .claude/settings.json:
+  {
+    "hooks": {
+      "SessionStart": [
+        { "matcher": "startup|resume", "command": "bash ${HOOKS_DIR}/orchestra-session-start.sh" },
+        { "matcher": "compact", "command": "bash ${HOOKS_DIR}/orchestra-post-compact.sh" }
+      ],
+      "PreCompact": [{ "matcher": "", "command": "bash ${HOOKS_DIR}/orchestra-pre-compact.sh" }],
+      "Stop": [{ "matcher": "", "command": "bash ${HOOKS_DIR}/orchestra-stop.sh" }],
+      "SubagentStop": [{ "matcher": "", "command": "bash ${HOOKS_DIR}/orchestra-subagent-stop.sh" }]
+    }
+  }
+MANUAL
+}
+
+# ============================================================
+# Main — route subcommand
+# ============================================================
+case "${1:-help}" in
+  init)  shift; cmd_init "${1:-}" ;;
+  link)  shift; cmd_link "$@" ;;
+  help|-h|--help) usage ;;
+  *)
+    red "Unknown command: $1"
+    usage
+    ;;
+esac

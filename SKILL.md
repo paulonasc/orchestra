@@ -1,0 +1,233 @@
+---
+name: orchestra
+description: Multi-agent coordination through files. Memory, threads, briefings, handoffs.
+command: /o
+---
+
+# Orchestra
+
+You are an AI agent using Orchestra — a file-based coordination system. You read from and write to `.orchestra/`. Hooks handle lifecycle capture automatically (session start/stop, daily logs). You handle the intelligence: creating threads, writing memory, generating briefings, recording decisions.
+
+## Finding the Orchestra root
+
+Read `.orchestra.link` in the current repo root to find the `.orchestra/` directory path.
+
+```yaml
+# .orchestra.link
+orchestra: ../orchestra-workspace/.orchestra
+repo: pied-piper-api
+```
+
+If `.orchestra/` exists directly in the repo root, use that. If neither `.orchestra/` nor `.orchestra.link` exists, Orchestra is not set up for this repo — tell the user.
+
+Store the resolved path. All paths below are relative to this `.orchestra/` root.
+
+## The /o command
+
+When the user invokes `/o`, present a dashboard:
+
+1. Read `state/progress.yaml` — show current milestone status (% complete, blocked items)
+2. Read `state/active-thread.md` — show what's currently being worked on
+3. Scan `handoffs/` for any unread handoffs (files created since last session)
+4. Read `state/blocked.yaml` for blocked items
+5. Present a concise status summary:
+
+```
+## Orchestra Status
+
+**Active:** 003-compress-video-pipeline
+**Progress:** MVP milestone — 4/7 done, 1 blocked
+**Handoffs:** 1 new (api → frontend: new endpoints ready)
+**Blocked:** frontend auth — waiting on API key rotation
+
+Next steps:
+- Read handoff from API team
+- Unblock auth by...
+```
+
+Suggest concrete next steps based on what you see. If nothing is active, ask what the user wants to work on.
+
+## Memory
+
+### MEMORY.md — curated long-term memory
+
+- Lives at `.orchestra/MEMORY.md`
+- Keep under 200 lines
+- Write durable facts: architecture decisions, patterns, gotchas, conventions, preferences
+- When you learn something durable about the project, append to MEMORY.md immediately. Do not wait.
+- Periodically prune stale entries to stay under the line limit
+
+### memory/YYYY-MM-DD.md — daily append-only log
+
+- Append timestamped entries when you complete meaningful work
+- Format: `## HH:MM — Agent (worktree) — what you did`
+- NEVER edit daily logs from previous days. Append-only.
+- Hooks auto-capture session boundaries. You write the substance.
+
+Memory is auto-injected via the SessionStart hook. You do not need to read it manually — it is already in your context at session start.
+
+## Threads
+
+Threads are units of work. They live in `threads/NNN-slug/`.
+
+### Creating a thread
+
+When the user describes new work ("I want to build X", "we need to fix Y"), create a thread:
+
+1. Look at existing directories in `threads/` to find the next sequential number
+2. Zero-pad to 3 digits: `001`, `002`, `003`
+3. Create `threads/NNN-slug/` with:
+   - `spec.md` — what to build, acceptance criteria, constraints
+   - `conversation.md` — design discussion log (append-only)
+   - `research.md` — optional, create when research is needed
+4. Update `state/active-thread.md` with the thread name
+
+### Working on a thread
+
+- Set `state/active-thread.md` to the current thread when starting work
+- Append design decisions and conversation to `conversation.md`
+- Update `spec.md` as requirements evolve
+
+## Research
+
+- Write findings to `threads/NNN-slug/research.md`
+- Always include `last_verified: YYYY-MM-DD` at the top of research files
+- If `research.md` is older than 7 days and you are about to build from it, flag it to the user and offer to re-verify before proceeding
+- Subagent research is auto-logged via the SubagentStop hook
+
+## Decisions
+
+When the user commits to a decision ("let's use X", "we decided Y"), record it:
+
+1. Look at existing files in `decisions/` to find the next sequential number
+2. Create `decisions/NNN-slug.md` with this format:
+
+```markdown
+# NNN: Decision Title
+
+**Date:** YYYY-MM-DD
+**Context:** Why this decision was needed
+**Decision:** What was decided
+**Reason:** Why this option was chosen over alternatives
+**Affects:** What parts of the system this impacts
+```
+
+Decisions are append-only. Never edit or delete existing decision files.
+
+## Briefings
+
+Generate briefings when the user says "let's build it", "spawn agents", "generate briefings", or similar.
+
+### How to generate
+
+1. Read the active thread's `spec.md`
+2. Read relevant `handoffs/`
+3. Read `MEMORY.md` for project context
+4. Read `state/progress.yaml` for current status
+5. Write one briefing per repo (multi-repo) or one per task (monorepo)
+
+### Where to write
+
+`briefings/NNN-slug-repo.md` — e.g., `briefings/003-compress-video-pipeline-api.md`
+
+### What each briefing must contain
+
+Each briefing must be fully self-contained. The receiving agent reads only this file.
+
+```markdown
+# Task: [title]
+
+**Thread:** NNN-slug
+**Repo:** repo-name
+**Priority:** high/medium/low
+
+## Context
+What this is about and why it matters. Include relevant architecture decisions.
+
+## What to build
+Specific deliverables. Be precise about files, functions, interfaces.
+
+## Files to read first
+List the exact files the agent should read before starting.
+
+## Constraints
+- Performance requirements
+- Compatibility requirements
+- Patterns to follow
+
+## Tests required
+What tests to write. Specific scenarios to cover.
+
+## When done
+- Write handoff to `handoffs/`
+- Update `state/progress.yaml`
+- Run [specific verification commands]
+```
+
+## Handoffs
+
+When you complete a significant chunk of work that another agent (or future session) needs to know about, write a handoff.
+
+### Where to write
+
+`handoffs/YYYY-MM-DD-from-to--slug.md` — e.g., `handoffs/2026-03-22-api-to-frontend--new-endpoints.md`
+
+### Format
+
+```markdown
+---
+from: repo-or-agent-name
+to: repo-or-agent-name
+thread: NNN-slug
+date: YYYY-MM-DD
+---
+
+## What I built
+Concrete summary of changes. Files modified, APIs added, schemas changed.
+
+## What the next agent needs to know
+Breaking changes, new dependencies, updated interfaces, migration steps.
+
+## Decisions made
+Choices made during implementation and why.
+
+## Known issues
+Bugs, TODOs, shortcuts taken, things that need follow-up.
+```
+
+Handoffs are append-only records. Never overwrite or delete them. Do not skip writing a handoff if you made changes another agent needs to know about.
+
+## Progress tracking
+
+Update `state/progress.yaml` when items are completed or blocked.
+
+```yaml
+milestone: MVP
+items:
+  - name: API compression endpoint
+    status: done
+  - name: Frontend upload UI
+    status: in_progress
+  - name: Auth token rotation
+    status: blocked
+    blocked_by: infrastructure team
+    reason: Waiting on new KMS key provisioning
+  - name: Integration tests
+    status: todo
+```
+
+Valid statuses: `todo`, `in_progress`, `done`, `blocked`. Blocked items must include `blocked_by` and `reason`.
+
+## Sessions
+
+- The Stop hook auto-captures session end times to the daily log
+- Before ending a session, write a substantive work summary to `memory/YYYY-MM-DD.md`
+- If significant work was done (feature built, major refactor, architecture change), write a full session log to `sessions/YYYY-MM-DD-slug.md`
+
+## Rules
+
+- Do NOT modify `.orchestra/` files that are not part of your current task
+- Do NOT delete or edit daily logs from previous days
+- Do NOT overwrite handoffs — they are append-only records
+- Do NOT skip writing a handoff if you made changes another agent needs to know about
+- Do NOT create threads, decisions, or briefings without user intent — wait for the user to describe work or request generation

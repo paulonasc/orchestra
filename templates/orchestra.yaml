@@ -1,0 +1,44 @@
+# Orchestra project configuration
+# Docs: https://github.com/orchestrahq/orchestra
+
+project: pied-piper
+structure: multi-repo
+root: ~/Projects/pied-piper
+
+repos:
+  api:
+    path: ~/Projects/pied-piper/pied-piper-api
+    language: typescript
+    remote: git@github.com:pied-piper/api.git
+  frontend:
+    path: ~/Projects/pied-piper/pied-piper-frontend
+    language: typescript
+    remote: git@github.com:pied-piper/frontend.git
+  infra:
+    path: ~/Projects/pied-piper/pied-piper-infra
+    language: hcl
+    remote: git@github.com:pied-piper/infra.git
+
+settings:
+  agent_tool: claude-code    # claude-code | codex | cursor | generic
+  worktree_prefix: wt        # worktree naming: wt-001-auth
+  briefing_style: detailed   # detailed | minimal
+
+# --- Monorepo example ---
+# project: pied-piper
+# structure: monorepo
+# root: .
+# workspaces:
+#   api:
+#     path: src/api
+#     language: typescript
+#   frontend:
+#     path: src/frontend
+#     language: typescript
+#   compression:
+#     path: src/compression
+#     language: rust
+# settings:
+#   agent_tool: claude-code
+#   worktree_prefix: wt
+#   briefing_style: detailed
