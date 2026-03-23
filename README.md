@@ -209,7 +209,9 @@ Auto-injected at session start (after active thread and progress — it's backgr
 
 ### Documentation sync
 
-Agents update repo docs (README, CLAUDE.md, ARCHITECTURE.md) as part of completing work — not as an afterthought. When a milestone item is marked done, the agent checks if any docs reference changed behavior and updates them inline. `/o docs` runs a full audit: scans all docs against recent git changes, reports what's stale, and offers to fix it.
+Agents update docs **at the moment the change happens** — not as an end-of-session chore. Made an architecture decision? Record it in `decisions/` now. Hit a deployment gotcha? Write it to `MEMORY.md` now. Changed an API? Update `CLAUDE.md` now. The SKILL.md defines specific triggers (decision made, gotcha found, endpoint changed, milestone completed) that tell the agent to stop and update docs immediately.
+
+`/o docs` runs a full audit as a safety net: scans all docs against recent git changes, reports what's stale, and offers to fix it. But the goal is that docs are already current before you need to run it.
 
 ### Importing context
 

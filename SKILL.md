@@ -702,7 +702,15 @@ After automated tests pass (or for items that can't be automated), ask the user:
 
 ## Decisions
 
-**YOU MUST record decisions as they happen.** When the user commits to a choice — "let's use X", "we decided Y", choosing a framework, picking a region, selecting an approach over alternatives — create a decision file immediately. Do not wait until the end of the session. If the session involved choices and `decisions/` is still empty, you did it wrong.
+**YOU MUST record decisions as they happen.** When the user commits to a choice — or when you recommend a change and the user accepts — create a decision file immediately. Do not wait until the end of the session. If the session involved choices and `decisions/` is still empty, you did it wrong.
+
+**These are all decisions — record them:**
+- Choosing a framework, library, or tool ("let's use X")
+- Infrastructure choices (ARM vs x86, region, instance type, managed vs self-hosted)
+- Architecture choices (monolith vs microservice, REST vs GraphQL, polling vs websocket)
+- Data model changes (new table, schema migration, JSONB vs normalized)
+- Deployment strategy (Docker build flags, CI/CD approach, environment setup)
+- "Let's not do X" — rejected approaches are decisions too
 
 1. Look at existing files in `decisions/` to find the next sequential number
 2. Create `decisions/NNN-slug.md` with this format:
@@ -941,22 +949,40 @@ If compaction happens and `state/session-context.md` is empty or stale, you will
 
 ## Documentation
 
-**YOU MUST keep repo documentation in sync with your changes.** When you complete work that affects documented behavior, update the docs before writing a handoff. This is not optional cleanup — stale docs mislead the next agent and the user.
+**YOU MUST keep documentation in sync with your changes — both repo docs AND Orchestra state.** This is not an end-of-session chore. You update docs **at the moment the change happens**, the same way you update code. Stale docs mislead the next agent and the user.
 
-### What to check after completing work
+### Proactive update triggers
 
-- **README.md** — does it reference commands, endpoints, file paths, or patterns you changed?
-- **CLAUDE.md** — does it describe architecture, patterns, or workflows you modified?
-- **ARCHITECTURE.md** / **CONTRIBUTING.md** — same check
-- **Inline doc comments** — did you change a function's behavior but leave the old docstring?
-- **`docs/` directory** — if the repo has one, scan for pages related to your changes
+**Stop what you're doing and update docs when any of these happen:**
 
-### When to update
+| Trigger | What to update |
+|---------|---------------|
+| You made an architecture or infrastructure decision | `decisions/NNN-slug.md` + `MEMORY.md` (gotchas, patterns) |
+| You discovered a gotcha or workaround | `MEMORY.md` (Gotchas section) |
+| You changed how something is deployed, built, or run | `README.md` or `CLAUDE.md` (commands, setup) |
+| You added/changed an API endpoint, CLI command, or config | `README.md`, `CLAUDE.md`, or `docs/` |
+| You hit an error and found the fix | `MEMORY.md` (so the next agent doesn't repeat it) |
+| You changed file structure or renamed things | Any doc that references old paths |
+| You completed a milestone item | Check all docs that reference what you just built |
+| You're about to write a handoff | Update docs first — the receiving agent reads docs before handoffs |
 
-- **Every time you mark a milestone item as `done`** — check if docs reference anything you just built or changed
-- **When you add a new feature** — if it's user-facing or agent-facing, it should be documented
-- **When you change an API, CLI command, config format, or file structure** — anything that other code or agents depend on
-- **When writing a handoff** — if the receiving agent would be confused by stale docs, fix them first
+**The rule is simple: if you just learned something or changed something that another agent or future-you would need to know, write it down NOW — not later, not at the end of the session, NOW.**
+
+Examples of what "now" means:
+- You switched ECS from x86 to ARM64 → immediately add to `decisions/` and `MEMORY.md` (platform choice, build gotcha)
+- You found that a Docker build needs `--platform linux/amd64` → immediately add to `MEMORY.md` Gotchas
+- You added a new BullMQ task → immediately update `CLAUDE.md` task list
+- You changed the database schema → immediately update any docs referencing the old schema
+
+### What to check
+
+- **README.md** — commands, endpoints, file paths, patterns
+- **CLAUDE.md** — architecture, patterns, workflows, task lists
+- **ARCHITECTURE.md** / **CONTRIBUTING.md** — structure, conventions
+- **Inline doc comments** — function behavior changes
+- **`docs/` directory** — pages related to your changes
+- **`MEMORY.md`** — gotchas, patterns, preferences
+- **`decisions/`** — any choice that has alternatives
 
 ### When NOT to update
 
@@ -964,7 +990,7 @@ If compaction happens and `state/session-context.md` is empty or stale, you will
 - Work-in-progress — wait until the milestone item is done
 - Docs owned by another repo — flag it in the handoff instead
 
-**If you finished significant work and docs are unchanged, ask yourself: "Would the next agent or user reading these docs be misled?" If yes, update them.**
+**If you finished significant work and docs are unchanged, something is wrong.** Ask yourself: "Would the next agent or user reading these docs be misled?" If yes, you missed a trigger above.
 
 ## Backlog
 
