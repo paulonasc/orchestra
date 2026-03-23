@@ -161,11 +161,14 @@ Read the thread's `spec.md`, `verification.md`, `conversation.md`, and related `
 
 ### `/o update` — Upgrade Orchestra
 
+First, read `.orchestra.link` to get the `.orchestra/` root path. Then run:
+
 ```bash
-cd __ORCHESTRA_DIR__ && git pull origin main && ./setup sync
+_ORCH_ROOT=$(grep "^root:" .orchestra.link 2>/dev/null | sed 's/^root: *//')
+cd __ORCHESTRA_DIR__ && git pull origin main && ./setup sync "$_ORCH_ROOT"
 ```
 
-Pulls latest Orchestra and re-links all known repos (skills, hooks, templates). Reports version change.
+This passes the project's `.orchestra/` path to sync so it can find the linked-repos manifest. Reports version change.
 
 ### Post-work audit
 

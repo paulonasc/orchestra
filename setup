@@ -284,13 +284,18 @@ MANUAL
 cmd_sync() {
   local orch_dir=""
 
-  # Find .orchestra/ from current directory or explicit arg
+  # Find .orchestra/ from explicit arg or current directory
   if [ -n "${1:-}" ]; then
     local explicit="${1/#\~/$HOME}"
-    if [ -d "$explicit/.orchestra" ]; then
-      orch_dir="$(cd "$explicit/.orchestra" && pwd)"
-    elif [ -d "$explicit" ] && [ -f "$explicit/MEMORY.md" ]; then
+    if [ -d "$explicit" ] && [ -f "$explicit/MEMORY.md" ]; then
+      # Direct path to .orchestra/ directory
       orch_dir="$(cd "$explicit" && pwd)"
+    elif [ -d "$explicit/.orchestra" ]; then
+      # Parent directory containing .orchestra/
+      orch_dir="$(cd "$explicit/.orchestra" && pwd)"
+    elif [ -f "$explicit/.orchestra.link" ]; then
+      # Repo with .orchestra.link
+      orch_dir="$(grep "^root:" "$explicit/.orchestra.link" 2>/dev/null | sed 's/^root: *//' | sed "s|^~|$HOME|")"
     fi
   else
     # Try to find from cwd
