@@ -111,7 +111,7 @@ Skills are intelligence — the agent decides when and how to use them.
 
 | Command | What it does |
 |---------|-------------|
-| `/o` | Executive dashboard — full roadmap with overall %, risks, what needs your attention |
+| `/o` | Executive dashboard — full roadmap with overall %, risks, what needs your attention, contextual hints |
 | `/o list` | List all threads with status and progress |
 | `/o active` | What the agent thinks we're working on right now |
 | `/o <thread>` | Deep dive into a specific workstream |

@@ -120,11 +120,32 @@ Show the last 3-5 decisions from `decisions/` with their reasoning:
 001 us-west-2 — Chose us-west-2 for all AWS services. Reason: lowest latency to west coast users, broadest service availability.
 ```
 
-**Footer — drill down**
+**Footer — navigation + contextual hint**
+
+Always show the navigation bar, then **one** contextual hint based on current state. Pick the most relevant:
+
+| Condition | Hint |
+|-----------|------|
+| Active thread has no `plan.md` | `💡 /o plan — create a plan for the active thread` |
+| Active thread has a `plan.md` | `💡 /o plan — view the plan for {{thread-name}}` |
+| No threads exist yet | `💡 Describe what you want to build and I'll create a thread` |
+| External files mentioned in conversation | `💡 /o import — bring external plans, research, or specs into a thread` |
+| Recent handoffs unread | `💡 /o <thread> — deep dive into a thread to see handoffs` |
+| Multiple threads, none active | `💡 /o active — see what we're working on (or set one)` |
+| Default (nothing else matches) | `💡 /o import — have a plan or doc from outside? Import it into a thread` |
+
+Render as:
 
 ```
-Threads: /o list  |  Focus: /o active  |  Detail: /o <thread-name>
+───
+/o list  ·  /o active  ·  /o <thread>  ·  /o plan  ·  /o import  ·  /o update
+💡 /o import — have a plan or doc from outside? Import it into a thread
 ```
+
+**Rules:**
+- Only show ONE hint — never a list. The user should read it in 1 second.
+- Rotate hints across invocations. Don't show the same hint twice in a row within a session. Track the last hint shown in `state/session-context.md`.
+- Keep hints under 80 characters.
 
 ### `/o list` — List all threads
 
