@@ -156,6 +156,8 @@ Every thread has a `verification.md` — the gate between "code was written" and
 1. **Automated** — agent runs test suites, typecheck, lint, API smoke tests, browser QA. No human needed.
 2. **Human-assisted** — agent tells you exactly what to manually test, what to look for, and what context to feed back (logs, screenshots, errors).
 
+When you report results back ("I ran terraform plan and got X"), the agent records it in `verification.md` and updates progress automatically. Progress captured from both sides — agent work and user work.
+
 A progress item can't be marked `done` until all verification items PASS.
 
 ### Briefings

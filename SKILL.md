@@ -421,6 +421,26 @@ The plan is a living document. Update it as work progresses — add/remove items
 - Update `spec.md` as requirements evolve
 - Update `plan.md` as milestones complete or the approach changes
 
+### Capturing user-reported progress
+
+**When the user tells you they did something — ran a command, completed a step, tested something, got a result — you MUST update Orchestra state immediately.** Do not just respond to what they said and move on. The user is giving you signal that progress happened outside your session.
+
+Update these files:
+
+1. **`verification.md`** — record the result with `**Tested by:** user (manual)`, the command they ran, and the output they shared
+2. **`state/progress.yaml`** — if their action completes or unblocks a milestone item, update its status
+3. **`state/session-context.md`** — reflect the new current state
+4. **`memory/YYYY-MM-DD.md`** — log what the user did with a timestamp
+
+Examples of user-reported progress:
+- "I ran terraform plan and got 41 to add" → record in verification.md, update progress item
+- "I set up the Route53 hosted zone" → mark that prerequisite as done
+- "I tested the login flow and it works" → record PASS in verification.md
+- "I ran the migration and it failed with X" → record FAIL with details
+- "I completed steps 1-5 from the checklist" → update all 5 items
+
+**If the user shares an error or failure, record it AND help them resolve it.** Don't just help — also capture the state so the next agent or session knows what happened.
+
 ## Research
 
 - Write findings to `threads/NNN-slug/research.md`
