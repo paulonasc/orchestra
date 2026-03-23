@@ -534,7 +534,9 @@ Based on what you find, tell the user:
 4. **Use browser tools if available** — if the repo has QA/browse skills (`/qa`, `/browse`, Playwright, Cypress), use them to verify UI changes. Navigate to the page, check the element renders, click the button, verify the result.
 5. **Check logs and output** — if the work involves background jobs or async processes, check that they complete without errors.
 
-Record every automated test result in `verification.md` with the exact command run and output observed.
+**IMMEDIATELY after each test/check runs, update `verification.md`.** Do not batch updates. Do not wait until all tests are done. Do not just report results in conversation without writing them to the file. The sequence is: run test → update `verification.md` → move to next test. Every single time.
+
+This applies whether you run the test yourself or the user runs it and tells you the result. If the user says "lint passed" and you respond "great" but don't update the file, you did it wrong.
 
 ### Phase 2: Human-assisted verification
 
