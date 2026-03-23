@@ -15,6 +15,7 @@ It is:
 - A **skill pack** (`SKILL.md` + `/o` command) for Claude Code
 - A **hooks pack** (lifecycle automation — deterministic, never forgotten)
 - A **directory convention** (`.orchestra/`)
+- An **awareness layer** (trigger-action rules + auto-scheduling heartbeat)
 - A **setup script**
 
 Install once, works everywhere. Same pattern as [gstack](https://github.com/garrytan/gstack/).
@@ -27,6 +28,7 @@ Research together          →  agent writes research.md
 Plan the approach          →  agent writes plan.md (all milestones upfront)
 "Let's build it"          →  agent generates briefings per repo
 Agents work in parallel   →  hooks auto-capture progress
+Heartbeat keeps state fresh →  /o heartbeat auto-checks every 10 min
 Agents verify their work  →  verification.md tracks pass/fail
 You come back             →  /o shows status, flags gaps, audits docs
 Thread ships              →  /o close — thread drops out of dashboard
@@ -44,7 +46,7 @@ git clone https://github.com/orchestrahq/orchestra.git ~/.orchestra
 
 **Step 2:** Open Claude Code and paste this. Claude does the rest.
 
-> Set up Orchestra. It's installed at `~/.orchestra`. Ask me: "What repos do you want to coordinate? Give me the full paths, a parent directory, or just one repo." If I give one repo, run `~/.orchestra/setup init <repo-path>` then `~/.orchestra/setup link <repo-path>`. If I give multiple repos or a directory containing repos, run `~/.orchestra/setup init <parent-directory>` (use the directory I gave you, or the common parent of the repos), then run `~/.orchestra/setup link <repo-path>` for each repo. After linking, add an "Orchestra" section to each repo's CLAUDE.md that says: this repo uses Orchestra for multi-agent coordination, the `/o` command shows status, memory and progress are auto-injected via hooks, and when finishing work always write a handoff if the next agent needs context.
+> Set up Orchestra. It's installed at `~/.orchestra`. Ask me: "What repos do you want to coordinate? Give me the full paths, a parent directory, or just one repo." If I give one repo, run `~/.orchestra/setup init <repo-path>` then `~/.orchestra/setup link <repo-path>`. If I give multiple repos or a directory containing repos, run `~/.orchestra/setup init <parent-directory>` (use the directory I gave you, or the common parent of the repos), then run `~/.orchestra/setup link <repo-path>` for each repo. The link command auto-injects Orchestra awareness rules into the repo's CLAUDE.md (trigger-action pairs so agents update state after commits, merges, decisions). After linking, run `/o heartbeat` to enable automatic state checks every 10 minutes.
 
 Claude asks for your repos, figures out the right setup, links everything, and installs hooks. Every future session starts with full project context — no commands needed.
 
@@ -67,6 +69,7 @@ Each linked repo gets:
 - `.orchestra/` directory added to `.gitignore` (if `.orchestra/` lives inside the repo)
 - `.claude/skills/o/SKILL.md` — the `/o` command
 - `.claude/settings.json` — lifecycle hooks installed
+- **Instruction file rules** — trigger-action pairs injected into CLAUDE.md, AGENTS.md, or .cursor/rules (agent-agnostic awareness)
 
 ## Directory structure
 
@@ -125,6 +128,7 @@ Skills are intelligence — the agent decides when and how to use them.
 | `/o checkpoint` | Flush all context to disk — compaction-proof snapshot |
 | `/o close` | Mark active thread as completed (shipped) or abandoned |
 | `/o reopen` | Reopen a completed or abandoned thread |
+| `/o heartbeat` | Audit state + auto-schedule every 10 min. Run once, stays active all session. |
 | `/o update` | Pull latest Orchestra and sync all repos |
 
 Hooks are mechanics — deterministic, fires every time, never forgotten. `SessionStart` injects memory. `Stop` captures session boundaries. You don't invoke hooks. They just run.
@@ -217,15 +221,27 @@ Agents update docs **at the moment the change happens** — not as an end-of-ses
 
 Plans, research, and specs created outside Orchestra can be imported into threads with `/o import`. The agent reads the content, auto-detects the type (plan, research, spec, or general context), asks whether to import into an existing thread or create a new one, normalizes it to Orchestra's format, and populates `progress.yaml` if milestones are detected. No manual file copying or reformatting needed.
 
+### Agent awareness
+
+The biggest failure mode in agent coordination: the agent gets deep into coding and forgets to update state. Decisions go unrecorded, progress isn't tracked, docs go stale. You end up saying "btw update orchestra" every 30 minutes.
+
+Orchestra solves this with three layers:
+
+**Layer 1 — Instruction file rules (all agents).** During `setup link`, Orchestra injects trigger-action rules directly into the repo's instruction file (CLAUDE.md, AGENTS.md, .cursor/rules). These are specific: "after you commit code, update session-context.md and daily log." Works across every agent. Zero runtime cost.
+
+**Layer 2 — `/o heartbeat` with auto-schedule (Claude Code).** Run `/o heartbeat` once — it audits state AND auto-schedules itself to recur every 10 minutes for the rest of the session. No cron expressions, no `/loop` commands. The agent can also suggest it proactively when it detects stale state during `/o`.
+
+**Layer 3 — Channels heartbeat (Claude Code, future).** Claude Code Channels (v2.1.80+, research preview) allow MCP servers to push events into a running session. An Orchestra Channel server could fire on git commits instead of a timer — true event-driven awareness. Blocked on Channels stabilizing (known bugs in v2.1.80-81).
+
 ## Works with
 
 Orchestra is agent-agnostic. It works with anything that reads files.
 
 | Agent | Integration | How |
 |-------|------------|-----|
-| **Claude Code** | First-class | Hooks + skills (`/o` command) |
-| **Codex** | Supported | `AGENTS.md` injection |
-| **Cursor** | Supported | `.cursor/rules/` injection |
+| **Claude Code** | First-class | Hooks + skills (`/o`) + auto-scheduling heartbeat |
+| **Codex** | Supported | `AGENTS.md` injection + trigger-action rules |
+| **Cursor** | Supported | `.cursor/rules/` injection + trigger-action rules |
 | **OpenCode** | Supported | `.opencode/instructions.md` injection |
 | **Any agent** | Compatible | Reads `.orchestra/` files directly |
 

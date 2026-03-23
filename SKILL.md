@@ -67,6 +67,7 @@ Store the resolved path. All paths below are relative to this `.orchestra/` root
 | `/o checkpoint` | `save` | Flush all context to disk — compaction-proof snapshot |
 | `/o close` | `git merge` | Mark active thread as completed (shipped) |
 | `/o reopen` | `revert` | Reopen a completed or abandoned thread |
+| `/o heartbeat` | `cron` | Audit state + auto-schedule every 10 min. `/o heartbeat stop` to cancel. |
 | `/o update` | `apt upgrade` | Pull latest Orchestra and sync all repos |
 
 ### `/o` — Executive dashboard
@@ -176,6 +177,7 @@ or just ask about any milestone
 | External files mentioned in conversation | `💡 /o import — bring that doc into a thread` |
 | Recent handoffs unread | `💡 New handoffs — /o <thread> to see what other agents delivered` |
 | Multiple threads, none active | `💡 /o active — pick a thread to focus on` |
+| State drift detected (stale session-context, missing decisions, daily log gaps) and no heartbeat scheduled | `💡 State drift detected — run /o heartbeat to enable automatic checks` |
 | Milestone items recently completed | `💡 /o docs — check if repo docs need updating after recent work` |
 | Active thread is 100% done + verified | `💡 /o close — mark this thread as completed to keep the dashboard clean` |
 | Default (nothing else matches) | `💡 Ask about any milestone ("what's left in M0?") or /o import to bring in external docs` |
@@ -396,6 +398,73 @@ Checkpoint saved:
 ```
 
 **This is the "save game" button.** Everything needed to resume from scratch is now on disk. If compaction happens or the session ends, nothing is lost.
+
+### `/o heartbeat` — Periodic state audit
+
+Lightweight check that audits whether Orchestra state is current and fixes gaps. **Auto-schedules itself** — the user runs it once, and it recurs every 10 minutes for the rest of the session.
+
+**Usage:**
+- `/o heartbeat` — audit now + auto-schedule recurring checks every 10 minutes
+- `/o heartbeat stop` — cancel the recurring schedule
+
+**Lifecycle:**
+
+1. **First invocation in a session** — runs the audit AND schedules recurring runs via `CronCreate` (every 10 minutes, `*/10 * * * *`). Confirm:
+   ```
+   Heartbeat: updated session-context, added decision 007. Scheduled every 10 min (auto-expires after 3 days).
+   ```
+
+2. **Subsequent runs (from cron)** — audit only, one-line output:
+   ```
+   Heartbeat: all current. ✓
+   ```
+   Or if it fixed something:
+   ```
+   Heartbeat: added decision 008, updated progress M0.12→done.
+   ```
+
+3. **Already scheduled** — if `state/session-context.md` has `heartbeat_scheduled: true`, skip scheduling and just audit. Prevents double-scheduling.
+
+4. **`/o heartbeat stop`** — cancel via `CronDelete` using the stored job ID. Remove `heartbeat_scheduled` from session-context. Confirm: `Heartbeat schedule cancelled.`
+
+**Scheduling implementation:**
+
+On first run, use the `CronCreate` tool:
+```
+CronCreate(cron: "*/10 * * * *", prompt: "/o heartbeat", recurring: true)
+```
+
+Store the returned job ID in `state/session-context.md` as `heartbeat_job_id: <id>`. Set `heartbeat_scheduled: true`.
+
+On `/o heartbeat stop`, use `CronDelete` with the stored job ID.
+
+**The audit (fast — under 30 seconds):**
+
+1. **Unrecorded decisions** — scan recent git commits (`git log --since="30 minutes ago"`) for keywords suggesting decisions (config changes, new dependencies, infrastructure changes). If found and no matching `decisions/` file exists, create one.
+
+2. **Session-context freshness** — read `state/session-context.md`. If `## Current state` doesn't reflect what you've been doing (stale), update it.
+
+3. **Daily log gaps** — read `memory/YYYY-MM-DD.md`. If significant work happened since the last entry, add an entry.
+
+4. **Progress drift** — if the active thread's `progress.yaml` has items that should be `done` based on what you've built, update them.
+
+5. **Doc staleness** — quick scan: did you change any API, config, or command since last heartbeat? If the relevant doc (README, CLAUDE.md) doesn't mention the change, flag it or fix it inline.
+
+**Rules:**
+- Keep it fast. Don't run full test suites or deep audits — that's `/o docs` and `/o checkpoint`.
+- Don't ask the user questions. Fix what you can silently, report what you did.
+- From cron, the output appears in the session automatically. The user sees it and can correct if needed.
+- This is the "git status" of Orchestra — quick, informational, occasionally catches drift.
+
+**When to suggest heartbeat (proactive):**
+
+If you detect stale Orchestra state (session-context outdated, decisions missing, daily log gaps) during a normal `/o` dashboard view, add this as the contextual hint:
+
+```
+💡 State drift detected — run /o heartbeat to enable automatic checks
+```
+
+Only suggest once per session. Track in `state/session-context.md`.
 
 ### `/o close` — Mark thread as completed
 
@@ -1037,6 +1106,37 @@ The `/o` dashboard should include a **Backlog** count in the footer when items e
 ```
 
 Don't dump the full backlog into the dashboard — just surface the count. The backlog is reference material, not active work.
+
+## Agent Awareness — Staying Current Mid-Session
+
+The biggest failure mode in multi-agent work is **mid-session drift** — the agent gets deep into coding and forgets to update Orchestra state. Decisions go unrecorded, progress isn't tracked, docs go stale. The user has to manually remind the agent "use Orchestra."
+
+Orchestra solves this with three layers, from most portable to most powerful:
+
+### Layer 1 — Instruction file rules (all agents)
+
+During `setup link`, Orchestra injects trigger-action rules into the repo's instruction file (CLAUDE.md, AGENTS.md, .cursor/rules). These are specific: "after you commit code, update session-context.md and daily log." Not "remember Orchestra" — that's too vague.
+
+These rules are always in the agent's system prompt. They survive compaction. They work across all agents.
+
+### Layer 2 — `/o heartbeat` with auto-schedule (Claude Code)
+
+Run `/o heartbeat` once — it audits state AND auto-schedules itself to recur every 10 minutes via `CronCreate`. No manual `/loop` commands needed.
+
+Every 10 minutes, the agent:
+1. Checks for unrecorded decisions in recent git history
+2. Updates session-context if stale
+3. Adds missing daily log entries
+4. Updates progress.yaml if items should be marked done
+5. Quick-checks docs for staleness
+
+The `/o` dashboard proactively suggests heartbeat when it detects stale state. One command, auto-recurring, self-managing.
+
+### Layer 3 — Channels heartbeat (Claude Code, experimental)
+
+Claude Code Channels (v2.1.80+, research preview) allow MCP servers to push events into a running session. An Orchestra Channel server could watch for git events and push state-update reminders automatically — a true daemon heartbeat.
+
+**Status:** Prototype only. Channels has known bugs (notifications not delivered, GitHub issues #36827, #37440). Do not recommend to users until stable. When stable, this replaces `/loop` as the recommended approach because it's event-driven (fires on git commit) rather than time-based (fires every N minutes).
 
 ## Rules
 

@@ -6,19 +6,24 @@ description: Multi-agent coordination through files. Memory, threads, briefings,
 ## Preamble (run first)
 
 ```bash
+# Auto-sync: if source SKILL.md is newer than installed copy, re-install
+_ORCH_DIR="/Users/paulonasc/Documents/orchestra"
+_SRC="$_ORCH_DIR/SKILL.md"
+_DST=".claude/skills/o/SKILL.md"
+if [ -f "$_SRC" ] && [ -f "$_DST" ] && [ "$_SRC" -nt "$_DST" ]; then
+  sed -e "s|/Users/paulonasc/Documents/orchestra/bin|${_ORCH_DIR}/bin|g" -e "s|/Users/paulonasc/Documents/orchestra|${_ORCH_DIR}|g" "$_SRC" > "$_DST"
+  echo "SKILL_SYNCED"
+fi
+# Check for remote updates
 _UPD=$(/Users/paulonasc/Documents/orchestra/bin/orchestra-update-check 2>/dev/null || true)
 [ -n "$_UPD" ] && echo "$_UPD" || true
 ```
 
-If output shows `UPGRADE_AVAILABLE <old> <new>`: tell the user "Orchestra update available: v{old} → v{new}" and ask if they want to update now. If yes, run:
+If output shows `SKILL_SYNCED`: tell the user "Orchestra skill updated — using latest version." **Then re-read `.claude/skills/o/SKILL.md` and follow the updated instructions for the rest of this invocation.**
 
-```bash
-cd /Users/paulonasc/Documents/orchestra && git pull origin main && ./setup link "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-```
+If output shows `UPGRADE_AVAILABLE <old> <new>`: tell the user "Orchestra update available: v{old} → v{new}. Run `/o update` to upgrade." Then continue normally.
 
-Then tell the user "Updated to v{new}" and continue. If no, continue without updating.
-
-If no output, Orchestra is up to date — continue silently.
+If no output, everything is current — continue silently.
 
 # Orchestra
 
@@ -26,59 +31,533 @@ You are an AI agent using Orchestra — a file-based coordination system. You re
 
 ## Finding the Orchestra root
 
-Read `.orchestra.link` in the current repo root to find the `.orchestra/` directory path.
+Resolve the `.orchestra/` path using this fallback chain:
+
+1. **`.orchestra/`** exists in the current repo root → use it directly
+2. **`.orchestra.link`** exists in the current repo root → read the `root:` path
+3. **Worktree fallback** — if neither exists, check if you're in a git worktree:
+   ```bash
+   _MAIN_WT=$(git worktree list --porcelain 2>/dev/null | head -1 | sed 's/^worktree //')
+   ```
+   If `_MAIN_WT` differs from the current directory, check `$_MAIN_WT/.orchestra.link`. This means worktrees get full Orchestra context with zero setup.
+4. If all three fail, Orchestra is not set up for this repo — tell the user.
 
 ```yaml
 # .orchestra.link
 root: /Users/richard/Projects/pied-piper/.orchestra
 ```
 
-If `.orchestra/` exists directly in the repo root, use that. If neither `.orchestra/` nor `.orchestra.link` exists, Orchestra is not set up for this repo — tell the user.
-
 Store the resolved path. All paths below are relative to this `.orchestra/` root.
 
 ## The /o command
 
-When the user invokes `/o update`, skip the dashboard and run the upgrade immediately:
+`/o` is the executive dashboard. It answers: "Where are we? What's at risk? What needs my attention?" — in 5 seconds.
+
+### Subcommands
+
+| Command | Like | What it does |
+|---------|------|-------------|
+| `/o` | — | Executive dashboard (default) |
+| `/o list` | `ls` | List all threads with status and progress |
+| `/o active` | `pwd` | Show what the agent thinks we're working on right now |
+| `/o <thread>` | `cd` + `ls` | Deep dive into a specific thread/workstream |
+| `/o plan` | `cat plan` | Show the plan for the active thread |
+| `/o import` | `cp` | Import external docs (plans, research, specs) into a thread |
+| `/o docs` | `lint` | Audit repo docs against recent changes, fix what's stale |
+| `/o checkpoint` | `save` | Flush all context to disk — compaction-proof snapshot |
+| `/o close` | `git merge` | Mark active thread as completed (shipped) |
+| `/o reopen` | `revert` | Reopen a completed or abandoned thread |
+| `/o heartbeat` | `cron` | Audit state + auto-schedule every 10 min. `/o heartbeat stop` to cancel. |
+| `/o update` | `apt upgrade` | Pull latest Orchestra and sync all repos |
+
+### `/o` — Executive dashboard
+
+Read all Orchestra state files and render a **top-down** dashboard. Start high-level, then drill down. The user should understand the project in 5 seconds from the top section alone.
+
+**Section 0 — Thread health (one line)**
+
+Count threads by status. Show at the top so the user instantly sees scope:
+
+```
+🔥 2 active     📦 8 completed     🗑️ 1 abandoned
+```
+
+Only show categories that have items. If all threads are active, just show `🔥 3 active`.
+
+**Section 1 — Roadmap (where are we?)**
+
+Read `threads/*/progress.yaml` files and aggregate — **but only `active` threads.** Completed and abandoned threads are done; don't include them in the roadmap percentage. Show every milestone across active threads. The user needs to see the full journey of what's in flight: where they are, what's ahead, and overall completion of active work.
+
+```
+## Roadmap  (overall: 49% — 26/53 items done)
+
+M0  Scaffolding & CI/CD   ████████░░  87%  (26/30)  ← you are here
+M1  Identity & Auth        ░░░░░░░░░░   0%  (0/8)
+M2  Core Features          ░░░░░░░░░░   0%  (0/10)
+M3  Integrations           ░░░░░░░░░░   0%  (0/3)
+M4  Launch & Hardening     ░░░░░░░░░░   0%  (0/2)
+```
+
+**The overall percentage is critical.** Sum all items across all milestones: `done / total`. Show it in the header so the user instantly knows "we're 49% through the whole project."
+
+If a thread's `progress.yaml` only has the current milestone defined, **flag this to the user**: "Only M0 is defined for this thread. Want me to add the remaining milestones from the plan so you can see the full roadmap?"
+
+If milestones don't have descriptions, derive them from the thread's `plan.md` or `spec.md`.
+
+**Section 2 — Needs your attention**
+
+Surface only things that require the human's input or approval:
+
+```
+## Needs your attention
+
+⚠ 2 verification items PENDING — need AWS credentials (infra terraform validate/plan)
+⚠ Decision needed — CI/CD provider (GitHub Actions vs CircleCI) not yet decided
+📬 3 new handoffs since last session
+```
+
+Categories: blocked items needing human action, pending verification needing manual testing or credentials, undecided decisions, unread handoffs.
+
+**Section 3 — Recently completed**
+
+What shipped since the user last checked. Pull from today's daily log and recent handoffs:
+
+```
+## Recently completed
+
+- API scaffold: NestJS + Kysely + health endpoint (api)
+- Frontend scaffold: Next.js + Tailwind + shadcn (frontend)
+- Infra: Terraform modules for ECS, RDS, ElastiCache (infra)
+```
+
+**Section 4 — Risks**
+
+Read `## Risks` from active thread specs. Surface any identified risks:
+
+```
+## Risks
+
+- Terraform state drift if multiple agents run apply concurrently (infra)
+- No staging environment yet — can't integration test across repos
+```
+
+If no risks section exists in any active thread, skip this section silently.
+
+**Section 5 — Recent decisions**
+
+Show the last 3-5 decisions from `decisions/` with their reasoning:
+
+```
+## Recent decisions
+
+001 us-west-2 — Chose us-west-2 for all AWS services. Reason: lowest latency to west coast users, broadest service availability.
+```
+
+**Footer — self-documenting navigation + contextual hint**
+
+The nav bar must be self-documenting — every command has a brief description so the user never has to look up docs. Then show ONE contextual hint.
+
+Render as:
+
+```
+───
+/o list (all threads)  ·  /o <thread> (deep dive)  ·  /o plan (view plan)
+/o import (bring in docs)  ·  /o docs (audit docs)  ·  /o checkpoint (save)  ·  /o close (ship it)
+or just ask about any milestone
+💡 <contextual hint>
+```
+
+**Contextual hint** — pick ONE based on current state:
+
+| Condition | Hint |
+|-----------|------|
+| Active thread has no `plan.md` | `💡 No plan yet — say "create a plan" or /o import to bring one in` |
+| Active thread has a `plan.md` | `💡 /o plan to review the plan, or ask "what's left in M0?"` |
+| No threads exist yet | `💡 Describe what you want to build and I'll create a thread` |
+| External files mentioned in conversation | `💡 /o import — bring that doc into a thread` |
+| Recent handoffs unread | `💡 New handoffs — /o <thread> to see what other agents delivered` |
+| Multiple threads, none active | `💡 /o active — pick a thread to focus on` |
+| State drift detected (stale session-context, missing decisions, daily log gaps) and no heartbeat scheduled | `💡 State drift detected — run /o heartbeat to enable automatic checks` |
+| Milestone items recently completed | `💡 /o docs — check if repo docs need updating after recent work` |
+| Active thread is 100% done + verified | `💡 /o close — mark this thread as completed to keep the dashboard clean` |
+| Default (nothing else matches) | `💡 Ask about any milestone ("what's left in M0?") or /o import to bring in external docs` |
+
+**Rules:**
+- Only show ONE hint — never a list. The user should read it in 1 second.
+- Rotate hints across invocations. Don't show the same hint twice in a row within a session. Track the last hint shown in `state/session-context.md`.
+- Keep hints under 80 characters.
+- The `or just ask about any milestone` line in the nav is critical — it tells users they can use natural language.
+
+### `/o list` — List all threads
+
+Scan `threads/` and render a summary table grouped by status. Read the `status` field from each thread's `progress.yaml` (default: `active` if missing).
+
+```
+## Active threads
+
+001  honestclaw-mvp       M0 87% | M1 0%    3 repos
+003  mobile-app           M0 20%             2 repos    ⚠ blocked
+
+## Completed
+
+002  payment-integration  M0 100% | M1 100%  1 repo     completed 2026-03-15
+
+## Abandoned
+
+004  old-auth-spike       M0 30%             1 repo     abandoned 2026-03-10
+```
+
+Active threads first (these are what matter). Completed threads show their `completed_at` date. Abandoned threads show date and are dimmed. If a category is empty, omit it.
+
+### `/o active` — What are we working on?
+
+Read `state/active-thread.md` and `state/session-context.md`. Show:
+
+```
+## Active
+
+Thread: 001-honestclaw-mvp
+Milestone: M0 — Scaffolding & CI/CD (87%)
+Current focus: Building GitHub Actions CI/CD pipelines for API and frontend
+Next steps: M0.27 API CI/CD, M0.28 Frontend CI/CD
+```
+
+If `session-context.md` exists and is recent, include the key context and current state from it.
+
+### `/o <thread-name>` — Thread deep dive
+
+Read the thread's `spec.md`, `plan.md`, `verification.md`, `conversation.md`, and related `handoffs/`. Render:
+
+1. **Spec summary** — problem, approach, acceptance criteria
+2. **Plan** — current phase, milestone progress, open questions (from `plan.md`)
+3. **Risks** — from `## Risks` in spec
+4. **Alternatives considered** — from `## Alternatives` in spec (what was rejected and why)
+5. **Verification status** — automated and manual test results
+6. **Progress** — milestone items for this thread with status
+7. **Handoffs** — recent handoffs related to this thread
+8. **Decisions** — decisions tagged with this thread
+
+### `/o plan` — Show thread plan
+
+Read the plan for the active thread (or specify a thread: `/o plan 001-slug`).
+
+1. Read `state/active-thread.md` to find the current thread (unless thread specified)
+2. Read `threads/NNN-slug/plan.md`
+3. Render: objective, current phase, items with status, open questions, dependencies
+
+If the thread has no `plan.md`, tell the user: "No plan committed for this thread yet. Want me to create one from the spec and research?"
+
+### `/o import` — Import external context into a thread
+
+Users often create plans, research docs, or specs outside Orchestra (in other tools, other repos, standalone files). This command brings that context into Orchestra's thread structure.
+
+**Flow — interactive, guided by the agent:**
+
+**Step 1 — What are you importing?**
+
+Ask: *"What do you want to import? Give me a file path, paste the content, or point me to it."*
+
+Read the content. If it's a file path, read the file. If pasted, use the pasted content. Identify the content type automatically:
+- **Plan** — has milestones, phases, or a structured breakdown of work → `plan.md`
+- **Research** — findings, comparisons, evaluations, investigation notes → `research.md`
+- **Spec** — requirements, acceptance criteria, problem statement → `spec.md`
+- **General context** — anything else (notes, meeting summaries, braindumps) → `conversation.md` (appended)
+
+Tell the user what you detected: *"This looks like a plan with 4 milestones. Importing as plan.md."*
+
+If ambiguous, ask: *"This could be a spec or a plan. Which fits better?"*
+
+**Step 2 — Where does it go?**
+
+Ask: *"Import into an existing thread or create a new one?"*
+
+If **existing thread**:
+1. List threads (same as `/o list` but compact — number, name, status)
+2. User picks one by number or name
+3. Check if the target file already exists (e.g., `plan.md` already in the thread)
+   - If yes: *"This thread already has a plan.md. Replace it, or append to conversation.md instead?"*
+   - If no: proceed
+
+If **new thread**:
+1. Ask: *"What's this thread about? One line."*
+2. Create the thread directory with the next sequential number
+3. If the import is a spec → write as `spec.md`, auto-generate a stub `conversation.md`
+4. If the import is a plan → write as `plan.md`, also ask *"Want me to generate a spec from this plan?"*
+5. If research → write as `research.md`
+6. Update `state/active-thread.md`
+
+**Step 3 — Normalize and enrich**
+
+Don't just copy-paste. Adapt the content to Orchestra's format:
+- If importing a plan: ensure milestones follow `M0, M1, M2...` convention. Extract items. **Populate the thread's `progress.yaml` with ALL milestones.**
+- If importing a spec: ensure it has `## Acceptance Criteria`, `## Risks`, `## Alternatives considered` sections. If missing, ask the user or flag: *"Your spec doesn't have a Risks section. Want me to add one?"*
+- If importing research: add `last_verified: YYYY-MM-DD` header.
+- Always: strip artifacts from external tools (Notion metadata, Google Docs formatting, etc.)
+
+**Step 4 — Verification check**
+
+After importing, **always** check the verification state:
+
+1. Does the thread have a `verification.md`? If not, create one.
+2. Are any items marked `done` in the thread's `progress.yaml`? If so, check if they have corresponding PASS entries in `verification.md`. **Items without verified tests are not truly done.**
+3. Scan the repo for existing tests: `npm test --listTests 2>/dev/null`, `find . -name "*test*" -o -name "*spec*"`, or equivalent. Report what exists.
+4. If tests exist but haven't been run against the imported work, flag it:
+
+   > "24 items marked done but nothing verified yet. Found 12 test files in the repo. Want me to run them and create a verification plan for what's not covered?"
+
+5. If no tests exist, propose a strategy:
+
+   > "No tests found. Here's a verification plan based on the acceptance criteria: [list]. Want me to create verification.md with this?"
+
+**Never mark items as `done` in the thread's progress.yaml if verification hasn't passed.** If importing a plan where work was done outside Orchestra, mark items as `in_progress` (code written but unverified) rather than `done`. Only mark `done` after verification passes.
+
+**Step 5 — Confirm**
+
+Show a summary:
+```
+Imported plan.md → threads/003-payment-integration/
+  4 milestones extracted (M0–M3, 23 items total)
+  threads/003-payment-integration/progress.yaml updated with all milestones
+  ⚠ 18 items marked in_progress (code exists, verification pending)
+  verification.md created with 23 checklist items
+  Active thread set to 003-payment-integration
+
+  Next: run /o checkpoint after verifying, or ask "run the tests"
+```
+
+**Key DX principles:**
+- Never make the user copy-paste into specific files manually
+- Never ask more than one question at a time
+- Default to the smart choice, confirm only when ambiguous
+- If the user says "import my plan from /path/to/file into the auth thread" — skip the interactive flow entirely, just do it
+- **Never assume work is verified just because a plan says it's done** — always check
+
+### `/o docs` — Audit and update documentation
+
+Scans all documentation in the repo (and linked repos) against recent changes. Finds what's stale and offers to fix it.
+
+**Flow:**
+
+1. **Discover docs** — find all documentation files in the repo:
+   - `README.md`, `CONTRIBUTING.md`, `ARCHITECTURE.md`, `CLAUDE.md` at repo root
+   - `docs/` directory if it exists
+   - Any `.md` files in key directories that serve as documentation
+
+2. **Gather recent changes** — read the git log since the last `/o docs` run (or last 7 days if first run):
+   ```bash
+   git log --since="7 days ago" --name-only --pretty=format:"%s"
+   ```
+
+3. **Cross-reference** — for each doc file, check if recent changes affect what it describes:
+   - Does `README.md` reference files, APIs, commands, or patterns that changed?
+   - Does `ARCHITECTURE.md` describe a structure that was reorganized?
+   - Does `CLAUDE.md` list commands or patterns that were added/removed?
+   - Are there new features with zero documentation?
+
+4. **Report and fix** — render a summary:
+   ```
+   ## Doc audit
+
+   README.md        ⚠ stale — mentions old API endpoint /v1/auth, now /v2/auth
+   ARCHITECTURE.md  ✓ current
+   CLAUDE.md        ⚠ stale — missing new BullMQ task "process-videos"
+   docs/api.md      ⚠ stale — 3 new endpoints not documented
+
+   Fix these now? (y/n)
+   ```
+
+   If the user says yes (or doesn't object), update the docs inline. Show the diff for each change.
+
+**Key rules:**
+- Don't rewrite docs from scratch — make targeted updates to stale sections
+- Preserve the doc's existing style and voice
+- If a doc references code, verify the references are still valid (file paths, function names, CLI commands)
+- Track the last audit date in `state/session-context.md` so subsequent runs only check new changes
+
+### `/o checkpoint` — Save everything to disk
+
+Force-flush all in-flight context to Orchestra files. Use before stepping away, before a long operation, or whenever you want a compaction-proof snapshot.
+
+**Write ALL of these:**
+
+1. **`state/session-context.md`** — full snapshot of current state: what you're working on, key context, decisions made, current progress, next steps
+2. **`threads/NNN-slug/progress.yaml`** — ensure all item statuses reflect reality right now
+3. **`verification.md`** — record any test results from this session not yet captured
+4. **`conversation.md`** — append any design decisions or important discussion from this session
+5. **`memory/YYYY-MM-DD.md`** — log what was accomplished so far today
+6. **`MEMORY.md`** — if you learned anything durable this session (patterns, gotchas, preferences), write it now
+
+After writing, confirm:
+```
+Checkpoint saved:
+  ✓ session-context.md — working on M0.11, terraform plan passed, Route53 blocker
+  ✓ progress.yaml — M0.8 done, M0.11 blocked (thread 001)
+  ✓ verification.md — 2 new results recorded
+  ✓ daily log — 3 entries added
+  ✓ MEMORY.md — added AWS region preference
+```
+
+**This is the "save game" button.** Everything needed to resume from scratch is now on disk. If compaction happens or the session ends, nothing is lost.
+
+### `/o heartbeat` — Periodic state audit
+
+Lightweight check that audits whether Orchestra state is current and fixes gaps. **Auto-schedules itself** — the user runs it once, and it recurs every 10 minutes for the rest of the session.
+
+**Usage:**
+- `/o heartbeat` — audit now + auto-schedule recurring checks every 10 minutes
+- `/o heartbeat stop` — cancel the recurring schedule
+
+**Lifecycle:**
+
+1. **First invocation in a session** — runs the audit AND schedules recurring runs via `CronCreate` (every 10 minutes, `*/10 * * * *`). Confirm:
+   ```
+   Heartbeat: updated session-context, added decision 007. Scheduled every 10 min (auto-expires after 3 days).
+   ```
+
+2. **Subsequent runs (from cron)** — audit only, one-line output:
+   ```
+   Heartbeat: all current. ✓
+   ```
+   Or if it fixed something:
+   ```
+   Heartbeat: added decision 008, updated progress M0.12→done.
+   ```
+
+3. **Already scheduled** — if `state/session-context.md` has `heartbeat_scheduled: true`, skip scheduling and just audit. Prevents double-scheduling.
+
+4. **`/o heartbeat stop`** — cancel via `CronDelete` using the stored job ID. Remove `heartbeat_scheduled` from session-context. Confirm: `Heartbeat schedule cancelled.`
+
+**Scheduling implementation:**
+
+On first run, use the `CronCreate` tool:
+```
+CronCreate(cron: "*/10 * * * *", prompt: "/o heartbeat", recurring: true)
+```
+
+Store the returned job ID in `state/session-context.md` as `heartbeat_job_id: <id>`. Set `heartbeat_scheduled: true`.
+
+On `/o heartbeat stop`, use `CronDelete` with the stored job ID.
+
+**The audit (fast — under 30 seconds):**
+
+1. **Unrecorded decisions** — scan recent git commits (`git log --since="30 minutes ago"`) for keywords suggesting decisions (config changes, new dependencies, infrastructure changes). If found and no matching `decisions/` file exists, create one.
+
+2. **Session-context freshness** — read `state/session-context.md`. If `## Current state` doesn't reflect what you've been doing (stale), update it.
+
+3. **Daily log gaps** — read `memory/YYYY-MM-DD.md`. If significant work happened since the last entry, add an entry.
+
+4. **Progress drift** — if the active thread's `progress.yaml` has items that should be `done` based on what you've built, update them.
+
+5. **Doc staleness** — quick scan: did you change any API, config, or command since last heartbeat? If the relevant doc (README, CLAUDE.md) doesn't mention the change, flag it or fix it inline.
+
+**Rules:**
+- Keep it fast. Don't run full test suites or deep audits — that's `/o docs` and `/o checkpoint`.
+- Don't ask the user questions. Fix what you can silently, report what you did.
+- From cron, the output appears in the session automatically. The user sees it and can correct if needed.
+- This is the "git status" of Orchestra — quick, informational, occasionally catches drift.
+
+**When to suggest heartbeat (proactive):**
+
+If you detect stale Orchestra state (session-context outdated, decisions missing, daily log gaps) during a normal `/o` dashboard view, add this as the contextual hint:
+
+```
+💡 State drift detected — run /o heartbeat to enable automatic checks
+```
+
+Only suggest once per session. Track in `state/session-context.md`.
+
+### `/o close` — Mark thread as completed
+
+Marks the active thread (or a specified thread) as shipped. This removes it from dashboard aggregation and session-start injection.
+
+**Usage:**
+- `/o close` — close the active thread as `completed`
+- `/o close --abandoned` — close the active thread as `abandoned` (work was killed, not shipped)
+- `/o close 003-slug` — close a specific thread by name
+
+**What it does:**
+
+1. Read the thread's `progress.yaml`
+2. Set `status: completed` (or `status: abandoned` with `--abandoned`)
+3. Set `completed_at: YYYY-MM-DD`
+4. If closing the active thread, clear `state/active-thread.md`
+5. Confirm:
+
+```
+Thread 001-instagram-integration closed as completed (2026-03-23).
+  24/24 items done, all verification PASS.
+  Cleared active thread — run /o list to pick the next one.
+```
+
+**Safety checks:**
+- If closing as `completed` but the thread has items not marked `done`, warn: *"3 items are still in_progress. Close anyway?"*
+- If closing as `completed` but `verification.md` has FAIL or PENDING items, warn: *"2 verification items haven't passed. Close anyway?"*
+- These are warnings, not blocks — the user might have good reasons (scope cut, moved to another thread, etc.)
+
+### Proactive close detection
+
+**You don't wait for the user to remember `/o close`.** Watch for these signals during normal conversation and prompt the user:
+
+**Signals that a thread is done:**
+- User says "merged", "PR merged", "landed", "shipped", "deployed", "this is done", "we're good", "all set"
+- You check a PR status (via `gh pr view`, `gh pr status`, etc.) and it shows `MERGED`
+- All items in the active thread's `progress.yaml` are `done` AND all `verification.md` items are `PASS`
+- User asks to start a new thread or switches context to different work
+
+**When you detect a signal**, prompt once — don't nag:
+
+> "Looks like 001-instagram-integration is shipped. Want me to close it? (This removes it from the dashboard and session injection — you can always reopen with `/o reopen`.)"
+
+If the user says yes, run the `/o close` flow. If no, drop it — don't ask again in the same session.
+
+**Rules:**
+- Only prompt for the **active thread**. Don't prompt about threads the user isn't currently working on.
+- Only prompt **once per session** per thread. Track in `state/session-context.md` if you already asked.
+- If verification has FAILs or PENDINGs, include that in the prompt: *"2 verification items are still pending — close anyway?"*
+- If the user merged a PR but there's still work on the thread (e.g., multi-PR thread), don't prompt — a single PR merge doesn't mean the thread is done.
+
+### `/o reopen` — Reopen a closed thread
+
+Reopens a completed or abandoned thread, setting it back to active.
+
+**Usage:**
+- `/o reopen 001-slug` — reopen a specific thread
+
+**What it does:**
+
+1. Read the thread's `progress.yaml`
+2. Set `status: active`
+3. Remove `completed_at`
+4. Optionally set `state/active-thread.md` to this thread
+5. Confirm:
+
+```
+Thread 001-instagram-integration reopened.
+  Set as active thread.
+```
+
+### `/o update` — Upgrade Orchestra
+
+First, read `.orchestra.link` to get the `.orchestra/` root path. Then run:
 
 ```bash
-cd /Users/paulonasc/Documents/orchestra && git pull origin main && ./setup link "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+_ORCH_ROOT=$(grep "^root:" .orchestra.link 2>/dev/null | sed 's/^root: *//')
+cd /Users/paulonasc/Documents/orchestra && git pull origin main && ./setup sync "$_ORCH_ROOT"
 ```
 
-Report the version change and continue.
-
-When the user invokes `/o` (no arguments), present a dashboard:
-
-1. Read `state/progress.yaml` — show current milestone status (% complete, blocked items)
-2. Read `state/active-thread.md` — show what's currently being worked on
-3. Scan `handoffs/` for any unread handoffs (files created since last session)
-4. Read `state/blocked.yaml` for blocked items
-5. Present a concise status summary:
-
-```
-## Orchestra Status
-
-**Active:** 003-compress-video-pipeline
-**Progress:** MVP milestone — 4/7 done, 1 blocked
-**Handoffs:** 1 new (api → frontend: new endpoints ready)
-**Blocked:** frontend auth — waiting on API key rotation
-
-Next steps:
-- Read handoff from API team
-- Unblock auth by...
-```
-
-Suggest concrete next steps based on what you see. If nothing is active, ask what the user wants to work on.
+This passes the project's `.orchestra/` path to sync so it can find the linked-repos manifest. Reports version change.
 
 ### Post-work audit
 
-When the user invokes `/o` after agents have finished work (handoffs exist, progress updated), also audit Orchestra state:
+When `/o` detects that agents have finished work (new handoffs exist, progress was updated since last session), also audit Orchestra state:
 
 1. Read all `verification.md` files for active threads — flag any with FAILs or PENDINGs
 2. Check if MEMORY.md was updated with new learnings
 3. Check if decisions made during work were recorded in `decisions/`
 4. Check if `sessions/` has a log for significant work
-5. Flag anything stale or missing and offer to update it
+5. Check if repo docs (README, CLAUDE.md, etc.) may be stale given recent changes — flag with a suggestion to run `/o docs`
+6. Check if any active threads are 100% done — suggest `/o close` to keep the dashboard clean
+7. Flag anything stale or missing and offer to update it
 
 This is how the user keeps Orchestra honest after parallel agent runs.
 
@@ -109,7 +588,15 @@ Memory is auto-injected via the SessionStart hook. You do not need to read it ma
 
 ## Threads
 
-Threads are units of work. They live in `threads/NNN-slug/`.
+Threads are units of work. They live in `threads/NNN-slug/`. Each thread follows a lifecycle: **chat → research → plan → execute & iterate**.
+
+### Thread lifecycle
+
+1. **Chat** — user describes the problem. Agent creates the thread with `spec.md` and `conversation.md`.
+2. **Research** — agent investigates approaches, writes `research.md`. Optional — skip for well-understood work.
+3. **Plan** — agent writes `plan.md` with milestones, phases, dependencies. When the plan is committed, milestones populate the thread's `progress.yaml` with ALL milestones upfront.
+4. **Execute & iterate** — agent builds, verifies (`verification.md`), writes handoffs. Plan evolves as work progresses.
+5. **Close** — when all work is shipped and verified, `/o close` marks the thread `completed`. It drops out of the dashboard and session injection. Still accessible via `/o <thread>` or `/o list`.
 
 ### Creating a thread
 
@@ -118,17 +605,50 @@ When the user describes new work ("I want to build X", "we need to fix Y"), crea
 1. Look at existing directories in `threads/` to find the next sequential number
 2. Zero-pad to 3 digits: `001`, `002`, `003`
 3. Create `threads/NNN-slug/` with:
-   - `spec.md` — what to build, acceptance criteria, constraints
+   - `spec.md` — what to build, acceptance criteria, alternatives considered, risks
    - `conversation.md` — design discussion log (append-only)
    - `verification.md` — test checklist and results (created when work begins)
    - `research.md` — optional, create when research is needed
+   - `plan.md` — created after research, before execution (see below)
 4. Update `state/active-thread.md` with the thread name
+
+### Writing a plan
+
+After research is done (or immediately for well-understood work), create `threads/NNN-slug/plan.md`:
+
+1. Define the objective — one sentence on what this thread delivers
+2. Break work into milestones (M0, M1, M2...) with items under each
+3. List dependencies, open questions, out-of-scope items
+4. **When the plan is committed, populate `threads/NNN-slug/progress.yaml` with ALL milestones** — not just the first one. The user needs to see the full roadmap from day one.
+
+The plan is a living document. Update it as work progresses — add/remove items, reorder milestones, close open questions. But never delete history — use strikethrough for removed items so the evolution is visible.
 
 ### Working on a thread
 
 - Set `state/active-thread.md` to the current thread when starting work
 - Append design decisions and conversation to `conversation.md`
 - Update `spec.md` as requirements evolve
+- Update `plan.md` as milestones complete or the approach changes
+
+### Capturing user-reported progress
+
+**When the user tells you they did something — ran a command, completed a step, tested something, got a result — you MUST update Orchestra state immediately.** Do not just respond to what they said and move on. The user is giving you signal that progress happened outside your session.
+
+Update these files:
+
+1. **`verification.md`** — record the result with `**Tested by:** user (manual)`, the command they ran, and the output they shared
+2. **`threads/NNN-slug/progress.yaml`** — if their action completes or unblocks a milestone item, update its status
+3. **`state/session-context.md`** — reflect the new current state
+4. **`memory/YYYY-MM-DD.md`** — log what the user did with a timestamp
+
+Examples of user-reported progress:
+- "I ran terraform plan and got 41 to add" → record in verification.md, update progress item
+- "I set up the Route53 hosted zone" → mark that prerequisite as done
+- "I tested the login flow and it works" → record PASS in verification.md
+- "I ran the migration and it failed with X" → record FAIL with details
+- "I completed steps 1-5 from the checklist" → update all 5 items
+
+**If the user shares an error or failure, record it AND help them resolve it.** Don't just help — also capture the state so the next agent or session knows what happened.
 
 ## Research
 
@@ -140,6 +660,22 @@ When the user describes new work ("I want to build X", "we need to fix Y"), crea
 ## Verification
 
 Every thread has a `verification.md` that tracks whether the work actually works. This is the gate between "code was written" and "done."
+
+### Test discovery (proactive)
+
+**When starting work on a thread — or when a thread's status changes to mostly complete — proactively check the testing landscape:**
+
+1. **Scan for existing tests** — look for test files in the repo (`__tests__/`, `*.test.*`, `*.spec.*`, `test/`, `cypress/`, etc.)
+2. **Check test infrastructure** — does the repo have test commands configured? (`npm test`, `pytest`, `go test`, test scripts in package.json)
+3. **Assess coverage** — do existing tests cover the areas affected by this thread's work?
+
+Based on what you find, tell the user:
+
+- **Tests exist and cover the work:** *"Found 15 test files, 3 cover the areas we changed. Running them now."*
+- **Tests exist but don't cover new work:** *"Found 12 test files but none cover [new feature]. Want me to write tests for it, or create a manual verification plan?"*
+- **No tests exist:** *"No test infrastructure found. Here's a verification strategy: [automated checks we can do] + [manual checks for the user]. Want me to create verification.md with this?"*
+
+**Do not wait for the user to ask about testing.** If you just imported a plan, finished building, or marked items done — check tests proactively.
 
 ### Flow
 
@@ -159,7 +695,9 @@ Every thread has a `verification.md` that tracks whether the work actually works
 4. **Use browser tools if available** — if the repo has QA/browse skills (`/qa`, `/browse`, Playwright, Cypress), use them to verify UI changes. Navigate to the page, check the element renders, click the button, verify the result.
 5. **Check logs and output** — if the work involves background jobs or async processes, check that they complete without errors.
 
-Record every automated test result in `verification.md` with the exact command run and output observed.
+**IMMEDIATELY after each test/check runs, update `verification.md`.** Do not batch updates. Do not wait until all tests are done. Do not just report results in conversation without writing them to the file. The sequence is: run test → update `verification.md` → move to next test. Every single time.
+
+This applies whether you run the test yourself or the user runs it and tells you the result. If the user says "lint passed" and you respond "great" but don't update the file, you did it wrong.
 
 ### Phase 2: Human-assisted verification
 
@@ -177,6 +715,7 @@ After automated tests pass (or for items that can't be automated), ask the user:
 **Key rules for human-assisted verification:**
 - Tell the user exactly what to test — don't say "check if it works," say "navigate to /settings, click Edit Profile, change the name, click Save, and verify the toast says 'Profile updated'"
 - Tell them what context to feed back — logs, screenshots, error messages, network tab output
+- **Update `verification.md` after EACH test result — not after all tests are done.** Same rule as Phase 1: observe result → write to file → next test. If you say "Profile scrape: PASS" in conversation but don't update the file before moving to the next test, you did it wrong.
 - When the user reports results, record them in `verification.md` with `**Tested by:** user (manual)`
 - If the user reports a failure, fix it, then re-run both automated and manual verification for that item
 
@@ -232,7 +771,15 @@ After automated tests pass (or for items that can't be automated), ask the user:
 
 ## Decisions
 
-**YOU MUST record decisions as they happen.** When the user commits to a choice — "let's use X", "we decided Y", choosing a framework, picking a region, selecting an approach over alternatives — create a decision file immediately. Do not wait until the end of the session. If the session involved choices and `decisions/` is still empty, you did it wrong.
+**YOU MUST record decisions as they happen.** When the user commits to a choice — or when you recommend a change and the user accepts — create a decision file immediately. Do not wait until the end of the session. If the session involved choices and `decisions/` is still empty, you did it wrong.
+
+**These are all decisions — record them:**
+- Choosing a framework, library, or tool ("let's use X")
+- Infrastructure choices (ARM vs x86, region, instance type, managed vs self-hosted)
+- Architecture choices (monolith vs microservice, REST vs GraphQL, polling vs websocket)
+- Data model changes (new table, schema migration, JSONB vs normalized)
+- Deployment strategy (Docker build flags, CI/CD approach, environment setup)
+- "Let's not do X" — rejected approaches are decisions too
 
 1. Look at existing files in `decisions/` to find the next sequential number
 2. Create `decisions/NNN-slug.md` with this format:
@@ -243,7 +790,9 @@ After automated tests pass (or for items that can't be automated), ask the user:
 **Date:** YYYY-MM-DD
 **Context:** Why this decision was needed
 **Decision:** What was decided
-**Reason:** Why this option was chosen over alternatives
+**Alternatives:** What else was considered and why it was rejected
+**Reason:** Why this option over the alternatives
+**Risks:** Tradeoffs or risks of this choice
 **Affects:** What parts of the system this impacts
 ```
 
@@ -255,10 +804,10 @@ Generate briefings when the user says "let's build it", "spawn agents", "generat
 
 ### How to generate
 
-1. Read the active thread's `spec.md`
+1. Read the active thread's `spec.md` and `plan.md`
 2. Read relevant `handoffs/`
 3. Read `MEMORY.md` for project context
-4. Read `state/progress.yaml` for current status
+4. Read the thread's `progress.yaml` for current status
 5. Write one briefing per repo (multi-repo) or one per task (monorepo)
 
 ### Where to write
@@ -300,7 +849,8 @@ Manual: what the user should check and what context to report back.
 ## When done
 - Update `verification.md` with test results — all items must PASS
 - Write handoff to `handoffs/`
-- Update `state/progress.yaml`
+- Update the thread's `progress.yaml`
+- Update repo docs if your changes affect them (see Documentation below)
 ```
 
 ## Handoffs
@@ -338,24 +888,81 @@ Handoffs are append-only records. Never overwrite or delete them. Do not skip wr
 
 ## Progress tracking
 
-Update `state/progress.yaml` when items are completed or blocked.
+Progress is **per-thread**, not global. Each thread has its own `threads/NNN-slug/progress.yaml`.
+
+### Thread status
+
+Every `progress.yaml` has a `status` field at the top level:
 
 ```yaml
-milestone: MVP
-items:
-  - name: API compression endpoint
-    status: done
-  - name: Frontend upload UI
-    status: in_progress
-  - name: Auth token rotation
-    status: blocked
-    blocked_by: infrastructure team
-    reason: Waiting on new KMS key provisioning
-  - name: Integration tests
-    status: todo
+status: active          # active | completed | abandoned
+completed_at:           # ISO date, set when status changes to completed/abandoned
 ```
 
+- `active` — work in progress, included in `/o` dashboard aggregation and session-start injection
+- `completed` — shipped/merged, excluded from dashboard aggregation, still readable via `/o <thread>`
+- `abandoned` — killed (scope cut, wrong approach, deprioritized), excluded from everything
+
+**Default:** if the `status` field is missing, treat as `active`. This makes the feature backward compatible — existing threads work without migration.
+
+### Format
+
+```yaml
+# threads/001-honestclaw-mvp/progress.yaml
+status: active
+milestones:
+  - name: M0
+    description: Scaffolding & CI/CD
+    items:
+      - name: API scaffold
+        status: done
+        repo: api
+      - name: Frontend scaffold
+        status: done
+        repo: frontend
+      - name: CI/CD pipelines
+        status: todo
+        repo: all
+  - name: M1
+    description: Core Features
+    items:
+      - name: Auth token rotation
+        status: blocked
+        repo: api
+        blocked_by: infrastructure team
+        reason: Waiting on new KMS key provisioning
+      - name: Integration tests
+        status: todo
+        repo: all
+```
+
+Each milestone has a `name`, `description` (human-readable). Each item has a `status`, `repo`, and optional `blocked_by`/`reason`.
+
 Valid statuses: `todo`, `in_progress`, `done`, `blocked`. Blocked items must include `blocked_by` and `reason`.
+
+### Why per-thread?
+
+- **Smaller context:** SessionStart hook injects only the active thread's progress — agents don't carry the weight of every thread
+- **No conflicts:** parallel agents working on different threads can't collide on the same file
+- **Clean separation:** each thread is self-contained (spec, plan, progress, verification)
+
+### `/o` dashboard aggregation
+
+The `/o` dashboard reads `threads/*/progress.yaml` files and aggregates them for the roadmap — **but only threads with `status: active`** (or missing status, which defaults to active). Completed and abandoned threads are excluded. This is a read-time computation, not stored anywhere. Each active thread contributes its milestones to the overall percentage.
+
+To check status efficiently: read the first few lines of each `progress.yaml` for the `status:` field. If `completed` or `abandoned`, skip the file entirely — don't parse milestones or items.
+
+### Legacy migration
+
+If `state/progress.yaml` exists (from before per-thread progress), migrate it:
+
+1. Read `state/progress.yaml`
+2. Group milestones by their `thread` field
+3. Write each group to `threads/NNN-slug/progress.yaml`
+4. Rename `state/progress.yaml` to `state/progress.yaml.migrated` (keep as backup)
+5. Tell the user: *"Migrated progress from global file to per-thread. Backup at state/progress.yaml.migrated."*
+
+If milestones don't have a `thread` field, ask the user which thread they belong to.
 
 ## Session context (compaction survival)
 
@@ -408,6 +1015,128 @@ If compaction happens and `state/session-context.md` is empty or stale, you will
 - The Stop hook auto-captures session end times to the daily log
 - Before ending a session, write a substantive work summary to `memory/YYYY-MM-DD.md`
 - **YOU MUST write a session log to `sessions/YYYY-MM-DD-slug.md`** when significant work was done: feature built, major refactor, architecture change, multi-repo scaffold, milestone completed. A session log is a curated narrative — what was built, why, what decisions were made, what's next. If you scaffolded an entire milestone and `sessions/` is empty, you did it wrong.
+
+## Documentation
+
+**YOU MUST keep documentation in sync with your changes — both repo docs AND Orchestra state.** This is not an end-of-session chore. You update docs **at the moment the change happens**, the same way you update code. Stale docs mislead the next agent and the user.
+
+### Proactive update triggers
+
+**Stop what you're doing and update docs when any of these happen:**
+
+| Trigger | What to update |
+|---------|---------------|
+| You made an architecture or infrastructure decision | `decisions/NNN-slug.md` + `MEMORY.md` (gotchas, patterns) |
+| You discovered a gotcha or workaround | `MEMORY.md` (Gotchas section) |
+| You changed how something is deployed, built, or run | `README.md` or `CLAUDE.md` (commands, setup) |
+| You added/changed an API endpoint, CLI command, or config | `README.md`, `CLAUDE.md`, or `docs/` |
+| You hit an error and found the fix | `MEMORY.md` (so the next agent doesn't repeat it) |
+| You changed file structure or renamed things | Any doc that references old paths |
+| You completed a milestone item | Check all docs that reference what you just built |
+| You're about to write a handoff | Update docs first — the receiving agent reads docs before handoffs |
+
+**The rule is simple: if you just learned something or changed something that another agent or future-you would need to know, write it down NOW — not later, not at the end of the session, NOW.**
+
+Examples of what "now" means:
+- You switched ECS from x86 to ARM64 → immediately add to `decisions/` and `MEMORY.md` (platform choice, build gotcha)
+- You found that a Docker build needs `--platform linux/amd64` → immediately add to `MEMORY.md` Gotchas
+- You added a new BullMQ task → immediately update `CLAUDE.md` task list
+- You changed the database schema → immediately update any docs referencing the old schema
+
+### What to check
+
+- **README.md** — commands, endpoints, file paths, patterns
+- **CLAUDE.md** — architecture, patterns, workflows, task lists
+- **ARCHITECTURE.md** / **CONTRIBUTING.md** — structure, conventions
+- **Inline doc comments** — function behavior changes
+- **`docs/` directory** — pages related to your changes
+- **`MEMORY.md`** — gotchas, patterns, preferences
+- **`decisions/`** — any choice that has alternatives
+
+### When NOT to update
+
+- Trivial internal refactors that don't change behavior
+- Work-in-progress — wait until the milestone item is done
+- Docs owned by another repo — flag it in the handoff instead
+
+**If you finished significant work and docs are unchanged, something is wrong.** Ask yourself: "Would the next agent or user reading these docs be misled?" If yes, you missed a trigger above.
+
+## Backlog
+
+`BACKLOG.md` lives at the `.orchestra/` root. It's the project-wide list of future work, tech debt, and things to revisit. Every agent sees it at session start. Thread-local notes get buried — the backlog doesn't.
+
+### When to add to the backlog
+
+**Any time you or the user identifies something as "do later", "investigate", "tech debt", "future improvement", or "revisit" — add it to `BACKLOG.md` immediately.** Don't only write it in the thread's conversation.md or spec.md. Those are invisible to agents working on other threads.
+
+### Format
+
+```markdown
+# Backlog
+
+## Future improvements
+
+- **Structured identity graph from Instagram tags** — extract `taggedUsers` from JSONB into junction table for fast graph queries. All raw data preserved, can backfill anytime. Thread: `001-instagram-integration` | Priority: when identity graph becomes product focus
+
+- **Redis caching for API responses** — high-traffic endpoints hitting DB on every request. Thread: `003-api-performance` | Priority: before launch
+
+## Tech debt
+
+- **Duplicate email validation logic** — exists in both `lib/auth/` and `lib/onboarding/`. Should consolidate. Thread: `002-auth-migration` | Priority: low
+
+## Investigate
+
+- **WebSocket vs SSE for real-time updates** — currently polling every 10s. Worth investigating if user count grows. Thread: none | Priority: post-MVP
+```
+
+### Rules
+
+- **One line per item** — title, brief context, thread reference, priority. The thread has the full details.
+- **Always include `Thread: NNN-slug`** if the item came from a thread. This is the pointer back to full context.
+- **Three categories:** `Future improvements` (features to build), `Tech debt` (code to fix), `Investigate` (unknowns to research)
+- **Keep it under 50 items.** If it's growing past that, some items should become threads with plans.
+- **Remove items when they become threads.** Once work is actively planned, it moves from backlog to a thread — don't track in both places.
+
+### `/o` dashboard integration
+
+The `/o` dashboard should include a **Backlog** count in the footer when items exist:
+
+```
+📋 3 backlog items — see BACKLOG.md
+```
+
+Don't dump the full backlog into the dashboard — just surface the count. The backlog is reference material, not active work.
+
+## Agent Awareness — Staying Current Mid-Session
+
+The biggest failure mode in multi-agent work is **mid-session drift** — the agent gets deep into coding and forgets to update Orchestra state. Decisions go unrecorded, progress isn't tracked, docs go stale. The user has to manually remind the agent "use Orchestra."
+
+Orchestra solves this with three layers, from most portable to most powerful:
+
+### Layer 1 — Instruction file rules (all agents)
+
+During `setup link`, Orchestra injects trigger-action rules into the repo's instruction file (CLAUDE.md, AGENTS.md, .cursor/rules). These are specific: "after you commit code, update session-context.md and daily log." Not "remember Orchestra" — that's too vague.
+
+These rules are always in the agent's system prompt. They survive compaction. They work across all agents.
+
+### Layer 2 — `/o heartbeat` with auto-schedule (Claude Code)
+
+Run `/o heartbeat` once — it audits state AND auto-schedules itself to recur every 10 minutes via `CronCreate`. No manual `/loop` commands needed.
+
+Every 10 minutes, the agent:
+1. Checks for unrecorded decisions in recent git history
+2. Updates session-context if stale
+3. Adds missing daily log entries
+4. Updates progress.yaml if items should be marked done
+5. Quick-checks docs for staleness
+
+The `/o` dashboard proactively suggests heartbeat when it detects stale state. One command, auto-recurring, self-managing.
+
+### Layer 3 — Channels heartbeat (Claude Code, experimental)
+
+Claude Code Channels (v2.1.80+, research preview) allow MCP servers to push events into a running session. An Orchestra Channel server could watch for git events and push state-update reminders automatically — a true daemon heartbeat.
+
+**Status:** Prototype only. Channels has known bugs (notifications not delivered, GitHub issues #36827, #37440). Do not recommend to users until stable. When stable, this replaces `/loop` as the recommended approach because it's event-driven (fires on git commit) rather than time-based (fires every N minutes).
 
 ## Rules
 

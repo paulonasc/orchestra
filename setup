@@ -134,6 +134,80 @@ GIEOF
 }
 
 # ============================================================
+# Inject Orchestra rules into agent instruction files
+# ============================================================
+ORCHESTRA_RULES_MARKER="## Orchestra — Agent Awareness Rules"
+
+orchestra_rules_block() {
+  cat << 'RULESEOF'
+
+## Orchestra — Agent Awareness Rules
+
+This repo uses Orchestra for multi-agent coordination. The `/o` command shows project status. Memory, progress, and context are auto-injected via hooks at session start.
+
+**After these actions, IMMEDIATELY update Orchestra state before responding:**
+
+| After you... | Update these files |
+|---|---|
+| Commit or push code | `session-context.md` + `memory/YYYY-MM-DD.md` |
+| Merge a PR | `progress.yaml` + daily log → prompt `/o close` if thread is done |
+| Make an architecture/infra/tool decision | `decisions/NNN-slug.md` + `MEMORY.md` |
+| Hit a gotcha or workaround | `MEMORY.md` (Gotchas section) |
+| Change documented behavior (API, config, deploy) | Update the relevant repo doc NOW |
+| Complete a milestone item | `progress.yaml` + `verification.md` + check if docs need updating |
+
+**Claude Code users:** Run `/o heartbeat` once to enable automatic state checks every 10 min.
+RULESEOF
+}
+
+inject_instruction_rules() {
+  local repo="$1"
+
+  # Claude Code — CLAUDE.md
+  local claude_md="$repo/CLAUDE.md"
+  if [ -f "$claude_md" ]; then
+    if ! grep -qF "$ORCHESTRA_RULES_MARKER" "$claude_md"; then
+      orchestra_rules_block >> "$claude_md"
+      echo "  Injected Orchestra rules into CLAUDE.md"
+    else
+      # Update existing block — remove old, append new
+      local tmp_file
+      tmp_file="$(mktemp)"
+      sed "/$ORCHESTRA_RULES_MARKER/,\$d" "$claude_md" > "$tmp_file"
+      orchestra_rules_block >> "$tmp_file"
+      mv "$tmp_file" "$claude_md"
+      echo "  Updated Orchestra rules in CLAUDE.md"
+    fi
+  fi
+
+  # Codex — AGENTS.md
+  local agents_md="$repo/AGENTS.md"
+  if [ -f "$agents_md" ]; then
+    if ! grep -qF "$ORCHESTRA_RULES_MARKER" "$agents_md"; then
+      orchestra_rules_block >> "$agents_md"
+      echo "  Injected Orchestra rules into AGENTS.md"
+    fi
+  fi
+
+  # Cursor — .cursor/rules/orchestra.mdc
+  if [ -d "$repo/.cursor/rules" ] || [ -d "$repo/.cursor" ]; then
+    mkdir -p "$repo/.cursor/rules"
+    local cursor_rule="$repo/.cursor/rules/orchestra.mdc"
+    orchestra_rules_block > "$cursor_rule"
+    echo "  Injected Orchestra rules into .cursor/rules/orchestra.mdc"
+  fi
+
+  # OpenCode — .opencode/instructions.md
+  local opencode_md="$repo/.opencode/instructions.md"
+  if [ -f "$opencode_md" ]; then
+    if ! grep -qF "$ORCHESTRA_RULES_MARKER" "$opencode_md"; then
+      orchestra_rules_block >> "$opencode_md"
+      echo "  Injected Orchestra rules into .opencode/instructions.md"
+    fi
+  fi
+}
+
+# ============================================================
 # LINK — connect a repo to an .orchestra/ directory
 # ============================================================
 cmd_link() {
@@ -209,6 +283,9 @@ cmd_link() {
       -e "s|__ORCHESTRA_DIR__|${ORCHESTRA_DIR}|g" \
     "$ORCHESTRA_DIR/SKILL.md" > "$repo_path/.claude/skills/o/SKILL.md"
   echo "  Installed skill pack to .claude/skills/o/"
+
+  # Inject Orchestra rules into agent instruction files
+  inject_instruction_rules "$repo_path"
 
   # Record repo in linked-repos manifest (for sync)
   local manifest="$orch_dir/linked-repos"
