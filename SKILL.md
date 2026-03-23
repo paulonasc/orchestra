@@ -43,6 +43,8 @@ Store the resolved path. All paths below are relative to this `.orchestra/` root
 | `/o list` | `ls` | List all threads with status and progress |
 | `/o active` | `pwd` | Show what the agent thinks we're working on right now |
 | `/o <thread>` | `cd` + `ls` | Deep dive into a specific thread/workstream |
+| `/o plan` | `cat plan` | Show the plan for the active thread |
+| `/o import` | `cp` | Import external docs (plans, research, specs) into a thread |
 | `/o update` | `apt upgrade` | Pull latest Orchestra and sync all repos |
 
 ### `/o` — Executive dashboard
@@ -155,15 +157,89 @@ If `session-context.md` exists and is recent, include the key context and curren
 
 ### `/o <thread-name>` — Thread deep dive
 
-Read the thread's `spec.md`, `verification.md`, `conversation.md`, and related `handoffs/`. Render:
+Read the thread's `spec.md`, `plan.md`, `verification.md`, `conversation.md`, and related `handoffs/`. Render:
 
 1. **Spec summary** — problem, approach, acceptance criteria
-2. **Risks** — from `## Risks` in spec
-3. **Alternatives considered** — from `## Alternatives` in spec (what was rejected and why)
-4. **Verification status** — automated and manual test results
-5. **Progress** — milestone items for this thread with status
-6. **Handoffs** — recent handoffs related to this thread
-7. **Decisions** — decisions tagged with this thread
+2. **Plan** — current phase, milestone progress, open questions (from `plan.md`)
+3. **Risks** — from `## Risks` in spec
+4. **Alternatives considered** — from `## Alternatives` in spec (what was rejected and why)
+5. **Verification status** — automated and manual test results
+6. **Progress** — milestone items for this thread with status
+7. **Handoffs** — recent handoffs related to this thread
+8. **Decisions** — decisions tagged with this thread
+
+### `/o plan` — Show thread plan
+
+Read the plan for the active thread (or specify a thread: `/o plan 001-slug`).
+
+1. Read `state/active-thread.md` to find the current thread (unless thread specified)
+2. Read `threads/NNN-slug/plan.md`
+3. Render: objective, current phase, items with status, open questions, dependencies
+
+If the thread has no `plan.md`, tell the user: "No plan committed for this thread yet. Want me to create one from the spec and research?"
+
+### `/o import` — Import external context into a thread
+
+Users often create plans, research docs, or specs outside Orchestra (in other tools, other repos, standalone files). This command brings that context into Orchestra's thread structure.
+
+**Flow — interactive, guided by the agent:**
+
+**Step 1 — What are you importing?**
+
+Ask: *"What do you want to import? Give me a file path, paste the content, or point me to it."*
+
+Read the content. If it's a file path, read the file. If pasted, use the pasted content. Identify the content type automatically:
+- **Plan** — has milestones, phases, or a structured breakdown of work → `plan.md`
+- **Research** — findings, comparisons, evaluations, investigation notes → `research.md`
+- **Spec** — requirements, acceptance criteria, problem statement → `spec.md`
+- **General context** — anything else (notes, meeting summaries, braindumps) → `conversation.md` (appended)
+
+Tell the user what you detected: *"This looks like a plan with 4 milestones. Importing as plan.md."*
+
+If ambiguous, ask: *"This could be a spec or a plan. Which fits better?"*
+
+**Step 2 — Where does it go?**
+
+Ask: *"Import into an existing thread or create a new one?"*
+
+If **existing thread**:
+1. List threads (same as `/o list` but compact — number, name, status)
+2. User picks one by number or name
+3. Check if the target file already exists (e.g., `plan.md` already in the thread)
+   - If yes: *"This thread already has a plan.md. Replace it, or append to conversation.md instead?"*
+   - If no: proceed
+
+If **new thread**:
+1. Ask: *"What's this thread about? One line."*
+2. Create the thread directory with the next sequential number
+3. If the import is a spec → write as `spec.md`, auto-generate a stub `conversation.md`
+4. If the import is a plan → write as `plan.md`, also ask *"Want me to generate a spec from this plan?"*
+5. If research → write as `research.md`
+6. Update `state/active-thread.md`
+
+**Step 3 — Normalize and enrich**
+
+Don't just copy-paste. Adapt the content to Orchestra's format:
+- If importing a plan: ensure milestones follow `M0, M1, M2...` convention. Extract items. **Populate `progress.yaml` with ALL milestones.**
+- If importing a spec: ensure it has `## Acceptance Criteria`, `## Risks`, `## Alternatives considered` sections. If missing, ask the user or flag: *"Your spec doesn't have a Risks section. Want me to add one?"*
+- If importing research: add `last_verified: YYYY-MM-DD` header.
+- Always: strip artifacts from external tools (Notion metadata, Google Docs formatting, etc.)
+
+**Step 4 — Confirm**
+
+Show a summary:
+```
+Imported plan.md → threads/003-payment-integration/
+  4 milestones extracted (M0–M3, 23 items total)
+  progress.yaml updated with all milestones
+  Active thread set to 003-payment-integration
+```
+
+**Key DX principles:**
+- Never make the user copy-paste into specific files manually
+- Never ask more than one question at a time
+- Default to the smart choice, confirm only when ambiguous
+- If the user says "import my plan from /path/to/file into the auth thread" — skip the interactive flow entirely, just do it
 
 ### `/o update` — Upgrade Orchestra
 
@@ -215,7 +291,14 @@ Memory is auto-injected via the SessionStart hook. You do not need to read it ma
 
 ## Threads
 
-Threads are units of work. They live in `threads/NNN-slug/`.
+Threads are units of work. They live in `threads/NNN-slug/`. Each thread follows a lifecycle: **chat → research → plan → execute & iterate**.
+
+### Thread lifecycle
+
+1. **Chat** — user describes the problem. Agent creates the thread with `spec.md` and `conversation.md`.
+2. **Research** — agent investigates approaches, writes `research.md`. Optional — skip for well-understood work.
+3. **Plan** — agent writes `plan.md` with milestones, phases, dependencies. When the plan is committed, milestones populate `progress.yaml` with ALL milestones upfront.
+4. **Execute & iterate** — agent builds, verifies (`verification.md`), writes handoffs. Plan evolves as work progresses.
 
 ### Creating a thread
 
@@ -228,13 +311,26 @@ When the user describes new work ("I want to build X", "we need to fix Y"), crea
    - `conversation.md` — design discussion log (append-only)
    - `verification.md` — test checklist and results (created when work begins)
    - `research.md` — optional, create when research is needed
+   - `plan.md` — created after research, before execution (see below)
 4. Update `state/active-thread.md` with the thread name
+
+### Writing a plan
+
+After research is done (or immediately for well-understood work), create `threads/NNN-slug/plan.md`:
+
+1. Define the objective — one sentence on what this thread delivers
+2. Break work into milestones (M0, M1, M2...) with items under each
+3. List dependencies, open questions, out-of-scope items
+4. **When the plan is committed, populate `state/progress.yaml` with ALL milestones** — not just the first one. The user needs to see the full roadmap from day one.
+
+The plan is a living document. Update it as work progresses — add/remove items, reorder milestones, close open questions. But never delete history — use strikethrough for removed items so the evolution is visible.
 
 ### Working on a thread
 
 - Set `state/active-thread.md` to the current thread when starting work
 - Append design decisions and conversation to `conversation.md`
 - Update `spec.md` as requirements evolve
+- Update `plan.md` as milestones complete or the approach changes
 
 ## Research
 
@@ -363,7 +459,7 @@ Generate briefings when the user says "let's build it", "spawn agents", "generat
 
 ### How to generate
 
-1. Read the active thread's `spec.md`
+1. Read the active thread's `spec.md` and `plan.md`
 2. Read relevant `handoffs/`
 3. Read `MEMORY.md` for project context
 4. Read `state/progress.yaml` for current status

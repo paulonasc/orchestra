@@ -22,8 +22,9 @@ Install once, works everywhere. Same pattern as [gstack](https://github.com/garr
 ## How it works
 
 ```
-You describe work         →  agent creates a thread
-Research together          →  agent writes the spec
+You describe work         →  agent creates a thread (spec + conversation)
+Research together          →  agent writes research.md
+Plan the approach          →  agent writes plan.md (all milestones upfront)
 "Let's build it"          →  agent generates briefings per repo
 Agents work in parallel   →  hooks auto-capture progress
 Agents verify their work  →  verification.md tracks pass/fail
@@ -72,7 +73,6 @@ Orchestra uses a single `.orchestra/` directory at your project root (or a share
 ```
 .orchestra/
 ├── orchestra.yaml          # project config
-├── plan.md                 # master plan
 ├── MEMORY.md               # curated long-term memory
 ├── memory/                 # daily logs (auto-captured)
 │   ├── 2026-03-20.md
@@ -87,6 +87,7 @@ Orchestra uses a single `.orchestra/` directory at your project root (or a share
 ├── threads/                # units of work
 │   ├── compress-video-pipeline/
 │   │   ├── spec.md
+│   │   ├── plan.md
 │   │   ├── verification.md
 │   │   ├── research.md
 │   │   └── conversation.md
@@ -114,6 +115,8 @@ Skills are intelligence — the agent decides when and how to use them.
 | `/o list` | List all threads with status and progress |
 | `/o active` | What the agent thinks we're working on right now |
 | `/o <thread>` | Deep dive into a specific workstream |
+| `/o plan` | Show the plan for the active thread |
+| `/o import` | Import external docs (plans, research, specs) into a thread |
 | `/o update` | Pull latest Orchestra and sync all repos |
 
 Hooks are mechanics — deterministic, fires every time, never forgotten. `SessionStart` injects memory. `Stop` captures session boundaries. You don't invoke hooks. They just run.
@@ -141,7 +144,9 @@ No manual intervention. No "write this down before it compacts." The context is 
 
 ### Threads
 
-A thread is any unit of work — a feature, a bug, a spike, an investigation. It lives in `threads/<name>/` and contains everything: spec (with risks and alternatives considered), verification, research, conversation history. Threads are the unit of planning and the input to briefing generation.
+A thread is any unit of work — a feature, a bug, a spike, an investigation. It lives in `threads/<name>/` and follows a lifecycle: **chat → research → plan → execute & iterate**.
+
+Each thread contains: spec (with risks and alternatives considered), plan (milestones and phases), verification, research, conversation history. When a plan is committed, all milestones populate `progress.yaml` upfront so the full roadmap is visible from day one.
 
 ### Verification
 
@@ -179,6 +184,10 @@ See briefing for updated types.
 ```
 
 The receiving agent picks this up at session start. No Slack message. No copy-paste.
+
+### Importing context
+
+Plans, research, and specs created outside Orchestra can be imported into threads with `/o import`. The agent reads the content, auto-detects the type (plan, research, spec, or general context), asks whether to import into an existing thread or create a new one, normalizes it to Orchestra's format, and populates `progress.yaml` if milestones are detected. No manual file copying or reformatting needed.
 
 ## Works with
 
