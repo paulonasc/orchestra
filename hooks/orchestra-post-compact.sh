@@ -73,4 +73,12 @@ if [ -f "$ORCH_ROOT/BACKLOG.md" ]; then
   fi
 fi
 
+# 7. Behavioral reminders — short, always present, keeps agents honest
+echo "=== ORCHESTRA RULES (always active) ==="
+echo "- When you make or accept a decision (tool, architecture, infra, approach): record it in .orchestra/decisions/ immediately"
+echo "- When you discover a gotcha or workaround: add it to .orchestra/MEMORY.md immediately"
+echo "- When you change behavior that's documented (API, commands, config, deploy): update the docs NOW, not later"
+echo "- When the user says 'merged/shipped/deployed' or all items are done: prompt to /o close the thread"
+echo ""
+
 exit 0
