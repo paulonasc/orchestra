@@ -79,7 +79,8 @@ Orchestra uses a single `.orchestra/` directory at your project root (or a share
 │   └── 2026-03-21.md
 ├── state/                  # machine-readable progress
 │   ├── progress.yaml
-│   └── blocked.yaml
+│   ├── blocked.yaml
+│   └── session-context.md  # volatile — current session scratchpad
 ├── decisions/              # append-only architectural decisions
 │   ├── 001-use-postgres.md
 │   └── 002-api-versioning.md
@@ -119,6 +120,16 @@ Two tiers:
 | Daily logs | `memory/YYYY-MM-DD.md` | Hooks (automatic) | Rolling — what happened today, auto-pruned after 30 days |
 
 Both are auto-injected at session start. You never type "here's the context."
+
+### Compaction survival
+
+Long sessions get compacted by Claude Code — the conversation is summarized and older messages are dropped. This destroys in-flight context. Orchestra solves this with continuous flush:
+
+- The agent maintains `state/session-context.md` — a volatile scratchpad updated after every significant action (not at the end, not before compaction, but continuously)
+- `PreCompact` hook echoes session context into the compaction input so the summarizer preserves it
+- `PostCompact` hook re-injects session context + memory + progress from disk
+
+No manual intervention. No "write this down before it compacts." The context is already on disk because the agent keeps it current.
 
 ### Threads
 

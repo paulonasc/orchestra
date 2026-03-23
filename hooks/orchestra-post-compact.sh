@@ -14,8 +14,16 @@ YESTERDAY="$(date -v-1d +%Y-%m-%d 2>/dev/null || date -d 'yesterday' +%Y-%m-%d 2
 echo "=== ORCHESTRA CONTEXT RESTORED AFTER COMPACTION ==="
 echo ""
 
+# Session context (most critical — this is what the agent was doing)
+if [ -f "$ORCH_ROOT/state/session-context.md" ]; then
+  echo "=== SESSION CONTEXT (what you were working on) ==="
+  cat "$ORCH_ROOT/state/session-context.md" 2>/dev/null
+  echo ""
+fi
+
 # Project memory
 if [ -f "$ORCH_ROOT/MEMORY.md" ]; then
+  echo "=== PROJECT MEMORY ==="
   cat "$ORCH_ROOT/MEMORY.md" 2>/dev/null
   echo ""
 fi
@@ -32,6 +40,13 @@ fi
 if [ -f "$ORCH_ROOT/state/active-thread.md" ]; then
   echo "=== ACTIVE THREAD ==="
   cat "$ORCH_ROOT/state/active-thread.md" 2>/dev/null
+  echo ""
+fi
+
+# Progress
+if [ -f "$ORCH_ROOT/state/progress.yaml" ]; then
+  echo "=== PROGRESS ==="
+  cat "$ORCH_ROOT/state/progress.yaml" 2>/dev/null
   echo ""
 fi
 

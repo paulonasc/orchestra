@@ -299,6 +299,52 @@ items:
 
 Valid statuses: `todo`, `in_progress`, `done`, `blocked`. Blocked items must include `blocked_by` and `reason`.
 
+## Session context (compaction survival)
+
+`state/session-context.md` is a volatile scratchpad that preserves your working context across compaction. **YOU MUST keep this file current throughout the session** — not at the end, not before compaction, but continuously as you work.
+
+**Update `state/session-context.md` after every significant action:** completing a task, making a decision, discovering something important, changing direction. This takes seconds and saves everything if compaction hits.
+
+### Format
+
+```markdown
+# Session Context
+
+## Working on
+003-compress-video-pipeline — building ffmpeg transcode config
+
+## Key context
+- User wants 3 output resolutions: 1080p, 720p, 480p
+- Decided to use fluent-ffmpeg over raw child_process (decision 004)
+- API endpoint accepts multipart, returns job_id UUID
+
+## Current state
+- API route done, transcoder WIP — 720p/480p flags not added yet
+- verification.md: 1/3 PASS, 2 PENDING
+
+## Next steps
+- Add resolution array to transcode config
+- Test all 3 outputs
+- Write handoff to frontend
+```
+
+### Rules
+
+- **Overwrite the entire file each time** — this is not a log, it's a snapshot of right now
+- Keep it under 50 lines — just enough to resume without loss
+- The PostCompact hook re-injects this file automatically after compaction
+- When the session ends, this file becomes stale — the session log and daily log are the durable records
+
+### What triggers an update
+
+- You completed a subtask or milestone item
+- You made or learned about a decision
+- You changed approach or direction
+- You discovered a gotcha or blocker
+- You're about to spawn subagents or do parallel work
+
+If compaction happens and `state/session-context.md` is empty or stale, you will lose context. Keep it current.
+
 ## Sessions
 
 - The Stop hook auto-captures session end times to the daily log
