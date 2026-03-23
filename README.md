@@ -110,7 +110,7 @@ Skills are intelligence — the agent decides when and how to use them.
 
 | Command | What it does |
 |---------|-------------|
-| `/o` | Executive dashboard — roadmap, risks, what needs your attention |
+| `/o` | Executive dashboard — full roadmap with overall %, risks, what needs your attention |
 | `/o list` | List all threads with status and progress |
 | `/o active` | What the agent thinks we're working on right now |
 | `/o <thread>` | Deep dive into a specific workstream |
@@ -141,7 +141,7 @@ No manual intervention. No "write this down before it compacts." The context is 
 
 ### Threads
 
-A thread is any unit of work — a feature, a bug, a spike, an investigation. It lives in `threads/<name>/` and contains everything: spec, verification, research, conversation history. Threads are the unit of planning and the input to briefing generation.
+A thread is any unit of work — a feature, a bug, a spike, an investigation. It lives in `threads/<name>/` and contains everything: spec (with risks and alternatives considered), verification, research, conversation history. Threads are the unit of planning and the input to briefing generation.
 
 ### Verification
 

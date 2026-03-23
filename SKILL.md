@@ -51,15 +51,21 @@ Read all Orchestra state files and render a **top-down** dashboard. Start high-l
 
 **Section 1 — Roadmap (where are we?)**
 
-Show all milestones from `progress.yaml` with full names, progress bars, and a "you are here" marker:
+Show **ALL** milestones from `progress.yaml` — not just the active one. The user needs to see the full journey: where they are, what's ahead, and overall project completion.
 
 ```
-## Roadmap
+## Roadmap  (overall: 49% — 26/53 items done)
 
 M0  Scaffolding & CI/CD   ████████░░  87%  (26/30)  ← you are here
-M1  Core Features          ░░░░░░░░░░   0%  (0/15)
-M2  Launch & Hardening     ░░░░░░░░░░   0%  (0/8)
+M1  Identity & Auth        ░░░░░░░░░░   0%  (0/8)
+M2  Core Features          ░░░░░░░░░░   0%  (0/10)
+M3  Integrations           ░░░░░░░░░░   0%  (0/3)
+M4  Launch & Hardening     ░░░░░░░░░░   0%  (0/2)
 ```
+
+**The overall percentage is critical.** Sum all items across all milestones: `done / total`. Show it in the header so the user instantly knows "we're 49% through the whole project."
+
+If `progress.yaml` only has the current milestone defined, **flag this to the user**: "Only M0 is defined in progress.yaml. Want me to add the remaining milestones from the thread spec so you can see the full roadmap?"
 
 If milestones don't have descriptions in `progress.yaml`, derive them from thread specs.
 
