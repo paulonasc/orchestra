@@ -29,6 +29,7 @@ Plan the approach          →  agent writes plan.md (all milestones upfront)
 Agents work in parallel   →  hooks auto-capture progress
 Agents verify their work  →  verification.md tracks pass/fail
 You come back             →  /o shows status, flags gaps, audits docs
+Thread ships              →  /o close — thread drops out of dashboard
 ```
 
 No orchestration server. No message queue. Files on disk, read by agents.
@@ -122,6 +123,8 @@ Skills are intelligence — the agent decides when and how to use them.
 | `/o import` | Import external docs (plans, research, specs) into a thread |
 | `/o docs` | Audit repo docs against recent changes, fix what's stale |
 | `/o checkpoint` | Flush all context to disk — compaction-proof snapshot |
+| `/o close` | Mark active thread as completed (shipped) or abandoned |
+| `/o reopen` | Reopen a completed or abandoned thread |
 | `/o update` | Pull latest Orchestra and sync all repos |
 
 Hooks are mechanics — deterministic, fires every time, never forgotten. `SessionStart` injects memory. `Stop` captures session boundaries. You don't invoke hooks. They just run.
@@ -149,9 +152,13 @@ No manual intervention. No "write this down before it compacts." The context is 
 
 ### Threads
 
-A thread is any unit of work — a feature, a bug, a spike, an investigation. It lives in `threads/<name>/` and follows a lifecycle: **chat → research → plan → execute & iterate**.
+A thread is any unit of work — a feature, a bug, a spike, an investigation. It lives in `threads/<name>/` and follows a lifecycle: **chat → research → plan → execute & iterate → close**.
 
-Each thread contains: spec (with risks and alternatives considered), plan (milestones and phases), progress (per-thread `progress.yaml`), verification, research, conversation history. When a plan is committed, all milestones populate the thread's `progress.yaml` upfront. The `/o` dashboard aggregates across all threads for the full roadmap.
+Each thread contains: spec (with risks and alternatives considered), plan (milestones and phases), progress (per-thread `progress.yaml`), verification, research, conversation history. When a plan is committed, all milestones populate the thread's `progress.yaml` upfront.
+
+Threads have a `status` field in their `progress.yaml`: `active`, `completed`, or `abandoned`. The `/o` dashboard only aggregates active threads — completed and abandoned threads are excluded from the roadmap percentage and session injection, keeping context lean as threads accumulate. `/o close` marks a thread as shipped; `/o reopen` brings it back if needed.
+
+You don't have to remember to close threads. When the agent detects a merge signal — you say "PR merged", a `gh pr view` shows MERGED, or all items are done and verified — it prompts you: *"Looks like this thread is shipped. Close it?"* One confirmation, done.
 
 ### Verification
 

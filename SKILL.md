@@ -65,15 +65,27 @@ Store the resolved path. All paths below are relative to this `.orchestra/` root
 | `/o import` | `cp` | Import external docs (plans, research, specs) into a thread |
 | `/o docs` | `lint` | Audit repo docs against recent changes, fix what's stale |
 | `/o checkpoint` | `save` | Flush all context to disk — compaction-proof snapshot |
+| `/o close` | `git merge` | Mark active thread as completed (shipped) |
+| `/o reopen` | `revert` | Reopen a completed or abandoned thread |
 | `/o update` | `apt upgrade` | Pull latest Orchestra and sync all repos |
 
 ### `/o` — Executive dashboard
 
 Read all Orchestra state files and render a **top-down** dashboard. Start high-level, then drill down. The user should understand the project in 5 seconds from the top section alone.
 
+**Section 0 — Thread health (one line)**
+
+Count threads by status. Show at the top so the user instantly sees scope:
+
+```
+🔥 2 active     📦 8 completed     🗑️ 1 abandoned
+```
+
+Only show categories that have items. If all threads are active, just show `🔥 3 active`.
+
 **Section 1 — Roadmap (where are we?)**
 
-Read ALL `threads/*/progress.yaml` files and aggregate. Show every milestone across every thread. The user needs to see the full journey: where they are, what's ahead, and overall project completion.
+Read `threads/*/progress.yaml` files and aggregate — **but only `active` threads.** Completed and abandoned threads are done; don't include them in the roadmap percentage. Show every milestone across active threads. The user needs to see the full journey of what's in flight: where they are, what's ahead, and overall completion of active work.
 
 ```
 ## Roadmap  (overall: 49% — 26/53 items done)
@@ -149,7 +161,7 @@ Render as:
 ```
 ───
 /o list (all threads)  ·  /o <thread> (deep dive)  ·  /o plan (view plan)
-/o import (bring in docs)  ·  /o docs (audit docs)  ·  /o checkpoint (save)
+/o import (bring in docs)  ·  /o docs (audit docs)  ·  /o checkpoint (save)  ·  /o close (ship it)
 or just ask about any milestone
 💡 <contextual hint>
 ```
@@ -165,6 +177,7 @@ or just ask about any milestone
 | Recent handoffs unread | `💡 New handoffs — /o <thread> to see what other agents delivered` |
 | Multiple threads, none active | `💡 /o active — pick a thread to focus on` |
 | Milestone items recently completed | `💡 /o docs — check if repo docs need updating after recent work` |
+| Active thread is 100% done + verified | `💡 /o close — mark this thread as completed to keep the dashboard clean` |
 | Default (nothing else matches) | `💡 Ask about any milestone ("what's left in M0?") or /o import to bring in external docs` |
 
 **Rules:**
@@ -175,17 +188,24 @@ or just ask about any milestone
 
 ### `/o list` — List all threads
 
-Scan `threads/` and render a summary table:
+Scan `threads/` and render a summary table grouped by status. Read the `status` field from each thread's `progress.yaml` (default: `active` if missing).
 
 ```
-## Threads
+## Active threads
 
-001  honestclaw-mvp      M0 87% | M1 0%    3 repos    active
-002  payment-integration  planning           1 repo     paused
-003  mobile-app           research            2 repos    blocked
+001  honestclaw-mvp       M0 87% | M1 0%    3 repos
+003  mobile-app           M0 20%             2 repos    ⚠ blocked
+
+## Completed
+
+002  payment-integration  M0 100% | M1 100%  1 repo     completed 2026-03-15
+
+## Abandoned
+
+004  old-auth-spike       M0 30%             1 repo     abandoned 2026-03-10
 ```
 
-Show: thread number, name, milestone progress, repos affected, current status (active/paused/blocked/done).
+Active threads first (these are what matter). Completed threads show their `completed_at` date. Abandoned threads show date and are dimmed. If a category is empty, omit it.
 
 ### `/o active` — What are we working on?
 
@@ -377,6 +397,76 @@ Checkpoint saved:
 
 **This is the "save game" button.** Everything needed to resume from scratch is now on disk. If compaction happens or the session ends, nothing is lost.
 
+### `/o close` — Mark thread as completed
+
+Marks the active thread (or a specified thread) as shipped. This removes it from dashboard aggregation and session-start injection.
+
+**Usage:**
+- `/o close` — close the active thread as `completed`
+- `/o close --abandoned` — close the active thread as `abandoned` (work was killed, not shipped)
+- `/o close 003-slug` — close a specific thread by name
+
+**What it does:**
+
+1. Read the thread's `progress.yaml`
+2. Set `status: completed` (or `status: abandoned` with `--abandoned`)
+3. Set `completed_at: YYYY-MM-DD`
+4. If closing the active thread, clear `state/active-thread.md`
+5. Confirm:
+
+```
+Thread 001-instagram-integration closed as completed (2026-03-23).
+  24/24 items done, all verification PASS.
+  Cleared active thread — run /o list to pick the next one.
+```
+
+**Safety checks:**
+- If closing as `completed` but the thread has items not marked `done`, warn: *"3 items are still in_progress. Close anyway?"*
+- If closing as `completed` but `verification.md` has FAIL or PENDING items, warn: *"2 verification items haven't passed. Close anyway?"*
+- These are warnings, not blocks — the user might have good reasons (scope cut, moved to another thread, etc.)
+
+### Proactive close detection
+
+**You don't wait for the user to remember `/o close`.** Watch for these signals during normal conversation and prompt the user:
+
+**Signals that a thread is done:**
+- User says "merged", "PR merged", "landed", "shipped", "deployed", "this is done", "we're good", "all set"
+- You check a PR status (via `gh pr view`, `gh pr status`, etc.) and it shows `MERGED`
+- All items in the active thread's `progress.yaml` are `done` AND all `verification.md` items are `PASS`
+- User asks to start a new thread or switches context to different work
+
+**When you detect a signal**, prompt once — don't nag:
+
+> "Looks like 001-instagram-integration is shipped. Want me to close it? (This removes it from the dashboard and session injection — you can always reopen with `/o reopen`.)"
+
+If the user says yes, run the `/o close` flow. If no, drop it — don't ask again in the same session.
+
+**Rules:**
+- Only prompt for the **active thread**. Don't prompt about threads the user isn't currently working on.
+- Only prompt **once per session** per thread. Track in `state/session-context.md` if you already asked.
+- If verification has FAILs or PENDINGs, include that in the prompt: *"2 verification items are still pending — close anyway?"*
+- If the user merged a PR but there's still work on the thread (e.g., multi-PR thread), don't prompt — a single PR merge doesn't mean the thread is done.
+
+### `/o reopen` — Reopen a closed thread
+
+Reopens a completed or abandoned thread, setting it back to active.
+
+**Usage:**
+- `/o reopen 001-slug` — reopen a specific thread
+
+**What it does:**
+
+1. Read the thread's `progress.yaml`
+2. Set `status: active`
+3. Remove `completed_at`
+4. Optionally set `state/active-thread.md` to this thread
+5. Confirm:
+
+```
+Thread 001-instagram-integration reopened.
+  Set as active thread.
+```
+
 ### `/o update` — Upgrade Orchestra
 
 First, read `.orchestra.link` to get the `.orchestra/` root path. Then run:
@@ -397,7 +487,8 @@ When `/o` detects that agents have finished work (new handoffs exist, progress w
 3. Check if decisions made during work were recorded in `decisions/`
 4. Check if `sessions/` has a log for significant work
 5. Check if repo docs (README, CLAUDE.md, etc.) may be stale given recent changes — flag with a suggestion to run `/o docs`
-6. Flag anything stale or missing and offer to update it
+6. Check if any active threads are 100% done — suggest `/o close` to keep the dashboard clean
+7. Flag anything stale or missing and offer to update it
 
 This is how the user keeps Orchestra honest after parallel agent runs.
 
@@ -436,6 +527,7 @@ Threads are units of work. They live in `threads/NNN-slug/`. Each thread follows
 2. **Research** — agent investigates approaches, writes `research.md`. Optional — skip for well-understood work.
 3. **Plan** — agent writes `plan.md` with milestones, phases, dependencies. When the plan is committed, milestones populate the thread's `progress.yaml` with ALL milestones upfront.
 4. **Execute & iterate** — agent builds, verifies (`verification.md`), writes handoffs. Plan evolves as work progresses.
+5. **Close** — when all work is shipped and verified, `/o close` marks the thread `completed`. It drops out of the dashboard and session injection. Still accessible via `/o <thread>` or `/o list`.
 
 ### Creating a thread
 
@@ -721,8 +813,26 @@ Handoffs are append-only records. Never overwrite or delete them. Do not skip wr
 
 Progress is **per-thread**, not global. Each thread has its own `threads/NNN-slug/progress.yaml`.
 
+### Thread status
+
+Every `progress.yaml` has a `status` field at the top level:
+
+```yaml
+status: active          # active | completed | abandoned
+completed_at:           # ISO date, set when status changes to completed/abandoned
+```
+
+- `active` — work in progress, included in `/o` dashboard aggregation and session-start injection
+- `completed` — shipped/merged, excluded from dashboard aggregation, still readable via `/o <thread>`
+- `abandoned` — killed (scope cut, wrong approach, deprioritized), excluded from everything
+
+**Default:** if the `status` field is missing, treat as `active`. This makes the feature backward compatible — existing threads work without migration.
+
+### Format
+
 ```yaml
 # threads/001-honestclaw-mvp/progress.yaml
+status: active
 milestones:
   - name: M0
     description: Scaffolding & CI/CD
@@ -761,7 +871,9 @@ Valid statuses: `todo`, `in_progress`, `done`, `blocked`. Blocked items must inc
 
 ### `/o` dashboard aggregation
 
-The `/o` dashboard reads ALL `threads/*/progress.yaml` files and aggregates them for the full roadmap. This is a read-time computation, not stored anywhere. Each thread contributes its milestones to the overall percentage.
+The `/o` dashboard reads `threads/*/progress.yaml` files and aggregates them for the roadmap — **but only threads with `status: active`** (or missing status, which defaults to active). Completed and abandoned threads are excluded. This is a read-time computation, not stored anywhere. Each active thread contributes its milestones to the overall percentage.
+
+To check status efficiently: read the first few lines of each `progress.yaml` for the `status:` field. If `completed` or `abandoned`, skip the file entirely — don't parse milestones or items.
 
 ### Legacy migration
 
