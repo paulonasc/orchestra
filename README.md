@@ -159,6 +159,8 @@ Every thread has a `verification.md` — the gate between "code was written" and
 
 When you report results back ("I ran terraform plan and got X"), the agent records it in `verification.md` and updates progress automatically. Progress captured from both sides — agent work and user work.
 
+The agent proactively discovers existing tests in the repo and proposes a verification strategy if none exists. When importing work done outside Orchestra, items are marked `in_progress` (not `done`) until verification passes — no unverified "100% complete" dashboards.
+
 A progress item can't be marked `done` until all verification items PASS.
 
 ### Briefings

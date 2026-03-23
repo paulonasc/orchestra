@@ -272,14 +272,35 @@ Don't just copy-paste. Adapt the content to Orchestra's format:
 - If importing research: add `last_verified: YYYY-MM-DD` header.
 - Always: strip artifacts from external tools (Notion metadata, Google Docs formatting, etc.)
 
-**Step 4 — Confirm**
+**Step 4 — Verification check**
+
+After importing, **always** check the verification state:
+
+1. Does the thread have a `verification.md`? If not, create one.
+2. Are any items marked `done` in `progress.yaml`? If so, check if they have corresponding PASS entries in `verification.md`. **Items without verified tests are not truly done.**
+3. Scan the repo for existing tests: `npm test --listTests 2>/dev/null`, `find . -name "*test*" -o -name "*spec*"`, or equivalent. Report what exists.
+4. If tests exist but haven't been run against the imported work, flag it:
+
+   > "24 items marked done but nothing verified yet. Found 12 test files in the repo. Want me to run them and create a verification plan for what's not covered?"
+
+5. If no tests exist, propose a strategy:
+
+   > "No tests found. Here's a verification plan based on the acceptance criteria: [list]. Want me to create verification.md with this?"
+
+**Never mark items as `done` in progress.yaml if verification hasn't passed.** If importing a plan where work was done outside Orchestra, mark items as `in_progress` (code written but unverified) rather than `done`. Only mark `done` after verification passes.
+
+**Step 5 — Confirm**
 
 Show a summary:
 ```
 Imported plan.md → threads/003-payment-integration/
   4 milestones extracted (M0–M3, 23 items total)
   progress.yaml updated with all milestones
+  ⚠ 18 items marked in_progress (code exists, verification pending)
+  verification.md created with 23 checklist items
   Active thread set to 003-payment-integration
+
+  Next: run /o checkpoint after verifying, or ask "run the tests"
 ```
 
 **Key DX principles:**
@@ -287,6 +308,7 @@ Imported plan.md → threads/003-payment-integration/
 - Never ask more than one question at a time
 - Default to the smart choice, confirm only when ambiguous
 - If the user says "import my plan from /path/to/file into the auth thread" — skip the interactive flow entirely, just do it
+- **Never assume work is verified just because a plan says it's done** — always check
 
 ### `/o docs` — Audit and update documentation
 
@@ -477,6 +499,22 @@ Examples of user-reported progress:
 ## Verification
 
 Every thread has a `verification.md` that tracks whether the work actually works. This is the gate between "code was written" and "done."
+
+### Test discovery (proactive)
+
+**When starting work on a thread — or when a thread's status changes to mostly complete — proactively check the testing landscape:**
+
+1. **Scan for existing tests** — look for test files in the repo (`__tests__/`, `*.test.*`, `*.spec.*`, `test/`, `cypress/`, etc.)
+2. **Check test infrastructure** — does the repo have test commands configured? (`npm test`, `pytest`, `go test`, test scripts in package.json)
+3. **Assess coverage** — do existing tests cover the areas affected by this thread's work?
+
+Based on what you find, tell the user:
+
+- **Tests exist and cover the work:** *"Found 15 test files, 3 cover the areas we changed. Running them now."*
+- **Tests exist but don't cover new work:** *"Found 12 test files but none cover [new feature]. Want me to write tests for it, or create a manual verification plan?"*
+- **No tests exist:** *"No test infrastructure found. Here's a verification strategy: [automated checks we can do] + [manual checks for the user]. Want me to create verification.md with this?"*
+
+**Do not wait for the user to ask about testing.** If you just imported a plan, finished building, or marked items done — check tests proactively.
 
 ### Flow
 
