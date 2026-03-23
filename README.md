@@ -142,7 +142,7 @@ Long sessions get compacted by Claude Code — the conversation is summarized an
 - `PreCompact` hook echoes session context into the compaction input so the summarizer preserves it
 - `PostCompact` hook re-injects session context + memory + progress from disk
 
-No manual intervention. No "write this down before it compacts." The context is already on disk because the agent keeps it current.
+No manual intervention. No "write this down before it compacts." The context is already on disk because the agent keeps it current. For an explicit full save, `/o checkpoint` flushes everything — session context, progress, verification, daily log, memory — in one shot.
 
 ### Threads
 
