@@ -554,6 +554,7 @@ After automated tests pass (or for items that can't be automated), ask the user:
 **Key rules for human-assisted verification:**
 - Tell the user exactly what to test — don't say "check if it works," say "navigate to /settings, click Edit Profile, change the name, click Save, and verify the toast says 'Profile updated'"
 - Tell them what context to feed back — logs, screenshots, error messages, network tab output
+- **Update `verification.md` after EACH test result — not after all tests are done.** Same rule as Phase 1: observe result → write to file → next test. If you say "Profile scrape: PASS" in conversation but don't update the file before moving to the next test, you did it wrong.
 - When the user reports results, record them in `verification.md` with `**Tested by:** user (manual)`
 - If the user reports a failure, fix it, then re-run both automated and manual verification for that item
 
