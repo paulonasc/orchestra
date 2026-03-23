@@ -212,9 +212,11 @@ Orchestra is agent-agnostic. It works with anything that reads files.
 root: /Users/richard/Projects/pied-piper/.orchestra
 ```
 
-## Auto-update
+## Auto-sync & Auto-update
 
-Orchestra checks for updates when you invoke `/o`. If a newer version exists on GitHub, the agent tells you and asks if you want to update. Updates are a `git pull` + re-link — takes seconds, no data lost.
+**Auto-sync (local):** Every `/o` invocation checks if the installed SKILL.md is stale compared to the source in the Orchestra repo. If so, it re-installs automatically — no manual `setup sync` needed. Edit Orchestra once, every linked repo picks it up on next `/o`.
+
+**Auto-update (remote):** Orchestra checks for updates on GitHub when you invoke `/o`. If a newer version exists, the agent tells you and asks if you want to update. `/o update` does a `git pull` + re-link — takes seconds, no data lost.
 
 To check manually: `~/.orchestra/bin/orchestra-update-check`
 

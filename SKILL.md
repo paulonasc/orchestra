@@ -6,13 +6,24 @@ description: Multi-agent coordination through files. Memory, threads, briefings,
 ## Preamble (run first)
 
 ```bash
+# Auto-sync: if source SKILL.md is newer than installed copy, re-install
+_ORCH_DIR="__ORCHESTRA_DIR__"
+_SRC="$_ORCH_DIR/SKILL.md"
+_DST=".claude/skills/o/SKILL.md"
+if [ -f "$_SRC" ] && [ -f "$_DST" ] && [ "$_SRC" -nt "$_DST" ]; then
+  sed -e "s|__ORCHESTRA_BIN__|${_ORCH_DIR}/bin|g" -e "s|__ORCHESTRA_DIR__|${_ORCH_DIR}|g" "$_SRC" > "$_DST"
+  echo "SKILL_SYNCED"
+fi
+# Check for remote updates
 _UPD=$(__ORCHESTRA_BIN__/orchestra-update-check 2>/dev/null || true)
 [ -n "$_UPD" ] && echo "$_UPD" || true
 ```
 
+If output shows `SKILL_SYNCED`: tell the user "Orchestra skill updated — using latest version." **Then re-read `.claude/skills/o/SKILL.md` and follow the updated instructions for the rest of this invocation.**
+
 If output shows `UPGRADE_AVAILABLE <old> <new>`: tell the user "Orchestra update available: v{old} → v{new}. Run `/o update` to upgrade." Then continue normally.
 
-If no output, Orchestra is up to date — continue silently.
+If no output, everything is current — continue silently.
 
 # Orchestra
 
