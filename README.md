@@ -117,6 +117,7 @@ Skills are intelligence — the agent decides when and how to use them.
 | `/o <thread>` | Deep dive into a specific workstream |
 | `/o plan` | Show the plan for the active thread |
 | `/o import` | Import external docs (plans, research, specs) into a thread |
+| `/o docs` | Audit repo docs against recent changes, fix what's stale |
 | `/o update` | Pull latest Orchestra and sync all repos |
 
 Hooks are mechanics — deterministic, fires every time, never forgotten. `SessionStart` injects memory. `Stop` captures session boundaries. You don't invoke hooks. They just run.
@@ -184,6 +185,10 @@ See briefing for updated types.
 ```
 
 The receiving agent picks this up at session start. No Slack message. No copy-paste.
+
+### Documentation sync
+
+Agents update repo docs (README, CLAUDE.md, ARCHITECTURE.md) as part of completing work — not as an afterthought. When a milestone item is marked done, the agent checks if any docs reference changed behavior and updates them inline. `/o docs` runs a full audit: scans all docs against recent git changes, reports what's stale, and offers to fix it.
 
 ### Importing context
 

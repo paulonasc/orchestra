@@ -63,6 +63,7 @@ Store the resolved path. All paths below are relative to this `.orchestra/` root
 | `/o <thread>` | `cd` + `ls` | Deep dive into a specific thread/workstream |
 | `/o plan` | `cat plan` | Show the plan for the active thread |
 | `/o import` | `cp` | Import external docs (plans, research, specs) into a thread |
+| `/o docs` | `lint` | Audit repo docs against recent changes, fix what's stale |
 | `/o update` | `apt upgrade` | Pull latest Orchestra and sync all repos |
 
 ### `/o` — Executive dashboard
@@ -147,7 +148,8 @@ Render as:
 ```
 ───
 /o list (all threads)  ·  /o <thread> (deep dive)  ·  /o plan (view plan)
-/o import (bring in docs)  ·  /o update (upgrade)  ·  or just ask about any milestone
+/o import (bring in docs)  ·  /o docs (audit docs)  ·  /o update (upgrade)
+or just ask about any milestone
 💡 <contextual hint>
 ```
 
@@ -161,6 +163,7 @@ Render as:
 | External files mentioned in conversation | `💡 /o import — bring that doc into a thread` |
 | Recent handoffs unread | `💡 New handoffs — /o <thread> to see what other agents delivered` |
 | Multiple threads, none active | `💡 /o active — pick a thread to focus on` |
+| Milestone items recently completed | `💡 /o docs — check if repo docs need updating after recent work` |
 | Default (nothing else matches) | `💡 Ask about any milestone ("what's left in M0?") or /o import to bring in external docs` |
 
 **Rules:**
@@ -284,6 +287,48 @@ Imported plan.md → threads/003-payment-integration/
 - Default to the smart choice, confirm only when ambiguous
 - If the user says "import my plan from /path/to/file into the auth thread" — skip the interactive flow entirely, just do it
 
+### `/o docs` — Audit and update documentation
+
+Scans all documentation in the repo (and linked repos) against recent changes. Finds what's stale and offers to fix it.
+
+**Flow:**
+
+1. **Discover docs** — find all documentation files in the repo:
+   - `README.md`, `CONTRIBUTING.md`, `ARCHITECTURE.md`, `CLAUDE.md` at repo root
+   - `docs/` directory if it exists
+   - Any `.md` files in key directories that serve as documentation
+
+2. **Gather recent changes** — read the git log since the last `/o docs` run (or last 7 days if first run):
+   ```bash
+   git log --since="7 days ago" --name-only --pretty=format:"%s"
+   ```
+
+3. **Cross-reference** — for each doc file, check if recent changes affect what it describes:
+   - Does `README.md` reference files, APIs, commands, or patterns that changed?
+   - Does `ARCHITECTURE.md` describe a structure that was reorganized?
+   - Does `CLAUDE.md` list commands or patterns that were added/removed?
+   - Are there new features with zero documentation?
+
+4. **Report and fix** — render a summary:
+   ```
+   ## Doc audit
+
+   README.md        ⚠ stale — mentions old API endpoint /v1/auth, now /v2/auth
+   ARCHITECTURE.md  ✓ current
+   CLAUDE.md        ⚠ stale — missing new BullMQ task "process-videos"
+   docs/api.md      ⚠ stale — 3 new endpoints not documented
+
+   Fix these now? (y/n)
+   ```
+
+   If the user says yes (or doesn't object), update the docs inline. Show the diff for each change.
+
+**Key rules:**
+- Don't rewrite docs from scratch — make targeted updates to stale sections
+- Preserve the doc's existing style and voice
+- If a doc references code, verify the references are still valid (file paths, function names, CLI commands)
+- Track the last audit date in `state/session-context.md` so subsequent runs only check new changes
+
 ### `/o update` — Upgrade Orchestra
 
 First, read `.orchestra.link` to get the `.orchestra/` root path. Then run:
@@ -303,7 +348,8 @@ When `/o` detects that agents have finished work (new handoffs exist, progress w
 2. Check if MEMORY.md was updated with new learnings
 3. Check if decisions made during work were recorded in `decisions/`
 4. Check if `sessions/` has a log for significant work
-5. Flag anything stale or missing and offer to update it
+5. Check if repo docs (README, CLAUDE.md, etc.) may be stale given recent changes — flag with a suggestion to run `/o docs`
+6. Flag anything stale or missing and offer to update it
 
 This is how the user keeps Orchestra honest after parallel agent runs.
 
@@ -548,6 +594,7 @@ Manual: what the user should check and what context to report back.
 - Update `verification.md` with test results — all items must PASS
 - Write handoff to `handoffs/`
 - Update `state/progress.yaml`
+- Update repo docs if your changes affect them (see Documentation below)
 ```
 
 ## Handoffs
@@ -671,6 +718,33 @@ If compaction happens and `state/session-context.md` is empty or stale, you will
 - The Stop hook auto-captures session end times to the daily log
 - Before ending a session, write a substantive work summary to `memory/YYYY-MM-DD.md`
 - **YOU MUST write a session log to `sessions/YYYY-MM-DD-slug.md`** when significant work was done: feature built, major refactor, architecture change, multi-repo scaffold, milestone completed. A session log is a curated narrative — what was built, why, what decisions were made, what's next. If you scaffolded an entire milestone and `sessions/` is empty, you did it wrong.
+
+## Documentation
+
+**YOU MUST keep repo documentation in sync with your changes.** When you complete work that affects documented behavior, update the docs before writing a handoff. This is not optional cleanup — stale docs mislead the next agent and the user.
+
+### What to check after completing work
+
+- **README.md** — does it reference commands, endpoints, file paths, or patterns you changed?
+- **CLAUDE.md** — does it describe architecture, patterns, or workflows you modified?
+- **ARCHITECTURE.md** / **CONTRIBUTING.md** — same check
+- **Inline doc comments** — did you change a function's behavior but leave the old docstring?
+- **`docs/` directory** — if the repo has one, scan for pages related to your changes
+
+### When to update
+
+- **Every time you mark a milestone item as `done`** — check if docs reference anything you just built or changed
+- **When you add a new feature** — if it's user-facing or agent-facing, it should be documented
+- **When you change an API, CLI command, config format, or file structure** — anything that other code or agents depend on
+- **When writing a handoff** — if the receiving agent would be confused by stale docs, fix them first
+
+### When NOT to update
+
+- Trivial internal refactors that don't change behavior
+- Work-in-progress — wait until the milestone item is done
+- Docs owned by another repo — flag it in the handoff instead
+
+**If you finished significant work and docs are unchanged, ask yourself: "Would the next agent or user reading these docs be misled?" If yes, update them.**
 
 ## Rules
 
