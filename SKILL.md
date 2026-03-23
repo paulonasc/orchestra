@@ -39,7 +39,15 @@ Store the resolved path. All paths below are relative to this `.orchestra/` root
 
 ## The /o command
 
-When the user invokes `/o`, present a dashboard:
+When the user invokes `/o update`, skip the dashboard and run the upgrade immediately:
+
+```bash
+cd __ORCHESTRA_DIR__ && git pull origin main && ./setup link "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+```
+
+Report the version change and continue.
+
+When the user invokes `/o` (no arguments), present a dashboard:
 
 1. Read `state/progress.yaml` — show current milestone status (% complete, blocked items)
 2. Read `state/active-thread.md` — show what's currently being worked on
