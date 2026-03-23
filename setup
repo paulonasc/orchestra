@@ -85,7 +85,7 @@ MEMEOF
   fi
 
   # state files
-  [ ! -f "$orch_dir/state/progress.yaml" ] && echo "milestones: {}" > "$orch_dir/state/progress.yaml" && echo "  Created state/progress.yaml"
+  # Note: progress.yaml is per-thread (threads/NNN-slug/progress.yaml), not global
   [ ! -f "$orch_dir/state/blocked.yaml" ] && echo "blocked: []" > "$orch_dir/state/blocked.yaml" && echo "  Created state/blocked.yaml"
 
   # .gitignore

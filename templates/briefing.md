@@ -22,6 +22,6 @@ _What tests to write._
 
 ## When Done
 
-1. Update `../state/progress.yaml` — mark relevant items as done
+1. Update the thread's `progress.yaml` — mark relevant items as done
 2. Write `../handoffs/{{REPO}}-{{THREAD_NUMBER}}-complete.md`
 3. Note any decisions or issues in the handoff

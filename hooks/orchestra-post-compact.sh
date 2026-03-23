@@ -43,9 +43,14 @@ if [ -f "$ORCH_ROOT/state/active-thread.md" ]; then
   echo ""
 fi
 
-# Progress
-if [ -f "$ORCH_ROOT/state/progress.yaml" ]; then
-  echo "=== PROGRESS ==="
+# Progress — active thread only (per-thread progress.yaml)
+ACTIVE_THREAD="$(get_active_thread "$ORCH_ROOT")"
+if [ -n "$ACTIVE_THREAD" ] && [ -f "$ORCH_ROOT/threads/$ACTIVE_THREAD/progress.yaml" ]; then
+  echo "=== PROGRESS ($ACTIVE_THREAD) ==="
+  cat "$ORCH_ROOT/threads/$ACTIVE_THREAD/progress.yaml" 2>/dev/null
+  echo ""
+elif [ -f "$ORCH_ROOT/state/progress.yaml" ]; then
+  echo "=== PROGRESS (legacy — run /o to migrate) ==="
   cat "$ORCH_ROOT/state/progress.yaml" 2>/dev/null
   echo ""
 fi

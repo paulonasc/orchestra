@@ -77,8 +77,8 @@ Orchestra uses a single `.orchestra/` directory at your project root (or a share
 ├── memory/                 # daily logs (auto-captured)
 │   ├── 2026-03-20.md
 │   └── 2026-03-21.md
-├── state/                  # machine-readable progress
-│   ├── progress.yaml
+├── state/                  # machine-readable state
+│   ├── active-thread.md
 │   ├── blocked.yaml
 │   └── session-context.md  # volatile — current session scratchpad
 ├── decisions/              # append-only architectural decisions
@@ -88,6 +88,7 @@ Orchestra uses a single `.orchestra/` directory at your project root (or a share
 │   ├── compress-video-pipeline/
 │   │   ├── spec.md
 │   │   ├── plan.md
+│   │   ├── progress.yaml       # per-thread milestones and items
 │   │   ├── verification.md
 │   │   ├── research.md
 │   │   └── conversation.md
@@ -148,7 +149,7 @@ No manual intervention. No "write this down before it compacts." The context is 
 
 A thread is any unit of work — a feature, a bug, a spike, an investigation. It lives in `threads/<name>/` and follows a lifecycle: **chat → research → plan → execute & iterate**.
 
-Each thread contains: spec (with risks and alternatives considered), plan (milestones and phases), verification, research, conversation history. When a plan is committed, all milestones populate `progress.yaml` upfront so the full roadmap is visible from day one.
+Each thread contains: spec (with risks and alternatives considered), plan (milestones and phases), progress (per-thread `progress.yaml`), verification, research, conversation history. When a plan is committed, all milestones populate the thread's `progress.yaml` upfront. The `/o` dashboard aggregates across all threads for the full roadmap.
 
 ### Verification
 

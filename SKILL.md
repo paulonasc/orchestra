@@ -73,7 +73,7 @@ Read all Orchestra state files and render a **top-down** dashboard. Start high-l
 
 **Section 1 — Roadmap (where are we?)**
 
-Show **ALL** milestones from `progress.yaml` — not just the active one. The user needs to see the full journey: where they are, what's ahead, and overall project completion.
+Read ALL `threads/*/progress.yaml` files and aggregate. Show every milestone across every thread. The user needs to see the full journey: where they are, what's ahead, and overall project completion.
 
 ```
 ## Roadmap  (overall: 49% — 26/53 items done)
@@ -87,9 +87,9 @@ M4  Launch & Hardening     ░░░░░░░░░░   0%  (0/2)
 
 **The overall percentage is critical.** Sum all items across all milestones: `done / total`. Show it in the header so the user instantly knows "we're 49% through the whole project."
 
-If `progress.yaml` only has the current milestone defined, **flag this to the user**: "Only M0 is defined in progress.yaml. Want me to add the remaining milestones from the thread spec so you can see the full roadmap?"
+If a thread's `progress.yaml` only has the current milestone defined, **flag this to the user**: "Only M0 is defined for this thread. Want me to add the remaining milestones from the plan so you can see the full roadmap?"
 
-If milestones don't have descriptions in `progress.yaml`, derive them from thread specs.
+If milestones don't have descriptions, derive them from the thread's `plan.md` or `spec.md`.
 
 **Section 2 — Needs your attention**
 
@@ -267,7 +267,7 @@ If **new thread**:
 **Step 3 — Normalize and enrich**
 
 Don't just copy-paste. Adapt the content to Orchestra's format:
-- If importing a plan: ensure milestones follow `M0, M1, M2...` convention. Extract items. **Populate `progress.yaml` with ALL milestones.**
+- If importing a plan: ensure milestones follow `M0, M1, M2...` convention. Extract items. **Populate the thread's `progress.yaml` with ALL milestones.**
 - If importing a spec: ensure it has `## Acceptance Criteria`, `## Risks`, `## Alternatives considered` sections. If missing, ask the user or flag: *"Your spec doesn't have a Risks section. Want me to add one?"*
 - If importing research: add `last_verified: YYYY-MM-DD` header.
 - Always: strip artifacts from external tools (Notion metadata, Google Docs formatting, etc.)
@@ -277,7 +277,7 @@ Don't just copy-paste. Adapt the content to Orchestra's format:
 After importing, **always** check the verification state:
 
 1. Does the thread have a `verification.md`? If not, create one.
-2. Are any items marked `done` in `progress.yaml`? If so, check if they have corresponding PASS entries in `verification.md`. **Items without verified tests are not truly done.**
+2. Are any items marked `done` in the thread's `progress.yaml`? If so, check if they have corresponding PASS entries in `verification.md`. **Items without verified tests are not truly done.**
 3. Scan the repo for existing tests: `npm test --listTests 2>/dev/null`, `find . -name "*test*" -o -name "*spec*"`, or equivalent. Report what exists.
 4. If tests exist but haven't been run against the imported work, flag it:
 
@@ -287,7 +287,7 @@ After importing, **always** check the verification state:
 
    > "No tests found. Here's a verification plan based on the acceptance criteria: [list]. Want me to create verification.md with this?"
 
-**Never mark items as `done` in progress.yaml if verification hasn't passed.** If importing a plan where work was done outside Orchestra, mark items as `in_progress` (code written but unverified) rather than `done`. Only mark `done` after verification passes.
+**Never mark items as `done` in the thread's progress.yaml if verification hasn't passed.** If importing a plan where work was done outside Orchestra, mark items as `in_progress` (code written but unverified) rather than `done`. Only mark `done` after verification passes.
 
 **Step 5 — Confirm**
 
@@ -295,7 +295,7 @@ Show a summary:
 ```
 Imported plan.md → threads/003-payment-integration/
   4 milestones extracted (M0–M3, 23 items total)
-  progress.yaml updated with all milestones
+  threads/003-payment-integration/progress.yaml updated with all milestones
   ⚠ 18 items marked in_progress (code exists, verification pending)
   verification.md created with 23 checklist items
   Active thread set to 003-payment-integration
@@ -359,7 +359,7 @@ Force-flush all in-flight context to Orchestra files. Use before stepping away, 
 **Write ALL of these:**
 
 1. **`state/session-context.md`** — full snapshot of current state: what you're working on, key context, decisions made, current progress, next steps
-2. **`state/progress.yaml`** — ensure all item statuses reflect reality right now
+2. **`threads/NNN-slug/progress.yaml`** — ensure all item statuses reflect reality right now
 3. **`verification.md`** — record any test results from this session not yet captured
 4. **`conversation.md`** — append any design decisions or important discussion from this session
 5. **`memory/YYYY-MM-DD.md`** — log what was accomplished so far today
@@ -369,7 +369,7 @@ After writing, confirm:
 ```
 Checkpoint saved:
   ✓ session-context.md — working on M0.11, terraform plan passed, Route53 blocker
-  ✓ progress.yaml — M0.8 done, M0.11 blocked
+  ✓ progress.yaml — M0.8 done, M0.11 blocked (thread 001)
   ✓ verification.md — 2 new results recorded
   ✓ daily log — 3 entries added
   ✓ MEMORY.md — added AWS region preference
@@ -434,7 +434,7 @@ Threads are units of work. They live in `threads/NNN-slug/`. Each thread follows
 
 1. **Chat** — user describes the problem. Agent creates the thread with `spec.md` and `conversation.md`.
 2. **Research** — agent investigates approaches, writes `research.md`. Optional — skip for well-understood work.
-3. **Plan** — agent writes `plan.md` with milestones, phases, dependencies. When the plan is committed, milestones populate `progress.yaml` with ALL milestones upfront.
+3. **Plan** — agent writes `plan.md` with milestones, phases, dependencies. When the plan is committed, milestones populate the thread's `progress.yaml` with ALL milestones upfront.
 4. **Execute & iterate** — agent builds, verifies (`verification.md`), writes handoffs. Plan evolves as work progresses.
 
 ### Creating a thread
@@ -458,7 +458,7 @@ After research is done (or immediately for well-understood work), create `thread
 1. Define the objective — one sentence on what this thread delivers
 2. Break work into milestones (M0, M1, M2...) with items under each
 3. List dependencies, open questions, out-of-scope items
-4. **When the plan is committed, populate `state/progress.yaml` with ALL milestones** — not just the first one. The user needs to see the full roadmap from day one.
+4. **When the plan is committed, populate `threads/NNN-slug/progress.yaml` with ALL milestones** — not just the first one. The user needs to see the full roadmap from day one.
 
 The plan is a living document. Update it as work progresses — add/remove items, reorder milestones, close open questions. But never delete history — use strikethrough for removed items so the evolution is visible.
 
@@ -476,7 +476,7 @@ The plan is a living document. Update it as work progresses — add/remove items
 Update these files:
 
 1. **`verification.md`** — record the result with `**Tested by:** user (manual)`, the command they ran, and the output they shared
-2. **`state/progress.yaml`** — if their action completes or unblocks a milestone item, update its status
+2. **`threads/NNN-slug/progress.yaml`** — if their action completes or unblocks a milestone item, update its status
 3. **`state/session-context.md`** — reflect the new current state
 4. **`memory/YYYY-MM-DD.md`** — log what the user did with a timestamp
 
@@ -638,7 +638,7 @@ Generate briefings when the user says "let's build it", "spawn agents", "generat
 1. Read the active thread's `spec.md` and `plan.md`
 2. Read relevant `handoffs/`
 3. Read `MEMORY.md` for project context
-4. Read `state/progress.yaml` for current status
+4. Read the thread's `progress.yaml` for current status
 5. Write one briefing per repo (multi-repo) or one per task (monorepo)
 
 ### Where to write
@@ -680,7 +680,7 @@ Manual: what the user should check and what context to report back.
 ## When done
 - Update `verification.md` with test results — all items must PASS
 - Write handoff to `handoffs/`
-- Update `state/progress.yaml`
+- Update the thread's `progress.yaml`
 - Update repo docs if your changes affect them (see Documentation below)
 ```
 
@@ -719,13 +719,13 @@ Handoffs are append-only records. Never overwrite or delete them. Do not skip wr
 
 ## Progress tracking
 
-Update `state/progress.yaml` when items are completed or blocked.
+Progress is **per-thread**, not global. Each thread has its own `threads/NNN-slug/progress.yaml`.
 
 ```yaml
+# threads/001-honestclaw-mvp/progress.yaml
 milestones:
   - name: M0
     description: Scaffolding & CI/CD
-    thread: 001-honestclaw-mvp
     items:
       - name: API scaffold
         status: done
@@ -738,7 +738,6 @@ milestones:
         repo: all
   - name: M1
     description: Core Features
-    thread: 001-honestclaw-mvp
     items:
       - name: Auth token rotation
         status: blocked
@@ -750,9 +749,31 @@ milestones:
         repo: all
 ```
 
-Each milestone has a `name`, `description` (human-readable), and optional `thread` reference. Each item has a `status`, `repo`, and optional `blocked_by`/`reason`.
+Each milestone has a `name`, `description` (human-readable). Each item has a `status`, `repo`, and optional `blocked_by`/`reason`.
 
 Valid statuses: `todo`, `in_progress`, `done`, `blocked`. Blocked items must include `blocked_by` and `reason`.
+
+### Why per-thread?
+
+- **Smaller context:** SessionStart hook injects only the active thread's progress — agents don't carry the weight of every thread
+- **No conflicts:** parallel agents working on different threads can't collide on the same file
+- **Clean separation:** each thread is self-contained (spec, plan, progress, verification)
+
+### `/o` dashboard aggregation
+
+The `/o` dashboard reads ALL `threads/*/progress.yaml` files and aggregates them for the full roadmap. This is a read-time computation, not stored anywhere. Each thread contributes its milestones to the overall percentage.
+
+### Legacy migration
+
+If `state/progress.yaml` exists (from before per-thread progress), migrate it:
+
+1. Read `state/progress.yaml`
+2. Group milestones by their `thread` field
+3. Write each group to `threads/NNN-slug/progress.yaml`
+4. Rename `state/progress.yaml` to `state/progress.yaml.migrated` (keep as backup)
+5. Tell the user: *"Migrated progress from global file to per-thread. Backup at state/progress.yaml.migrated."*
+
+If milestones don't have a `thread` field, ask the user which thread they belong to.
 
 ## Session context (compaction survival)
 
