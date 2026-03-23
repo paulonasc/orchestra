@@ -62,7 +62,8 @@ git clone https://github.com/orchestrahq/orchestra.git ~/.orchestra
 ```
 
 Each linked repo gets:
-- `.orchestra.link` — one-line pointer to the shared `.orchestra/` directory (auto-gitignored, contains absolute paths)
+- `.orchestra.link` — one-line pointer to the shared `.orchestra/` directory (auto-gitignored)
+- `.orchestra/` directory added to `.gitignore` (if `.orchestra/` lives inside the repo)
 - `.claude/skills/o/SKILL.md` — the `/o` command
 - `.claude/settings.json` — lifecycle hooks installed
 

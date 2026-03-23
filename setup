@@ -191,9 +191,13 @@ cmd_link() {
       echo '.orchestra.link' >> "$repo_path/.gitignore"
       echo "  Added .orchestra.link to .gitignore"
     fi
+    if ! grep -qxF '.orchestra/' "$repo_path/.gitignore"; then
+      echo '.orchestra/' >> "$repo_path/.gitignore"
+      echo "  Added .orchestra/ to .gitignore"
+    fi
   else
-    echo '.orchestra.link' > "$repo_path/.gitignore"
-    echo "  Created .gitignore with .orchestra.link"
+    printf '.orchestra.link\n.orchestra/\n' > "$repo_path/.gitignore"
+    echo "  Created .gitignore with .orchestra.link and .orchestra/"
   fi
 
   # Install hooks in repo's .claude/settings.json
