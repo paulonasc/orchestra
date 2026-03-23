@@ -118,6 +118,7 @@ Skills are intelligence — the agent decides when and how to use them.
 | `/o plan` | Show the plan for the active thread |
 | `/o import` | Import external docs (plans, research, specs) into a thread |
 | `/o docs` | Audit repo docs against recent changes, fix what's stale |
+| `/o checkpoint` | Flush all context to disk — compaction-proof snapshot |
 | `/o update` | Pull latest Orchestra and sync all repos |
 
 Hooks are mechanics — deterministic, fires every time, never forgotten. `SessionStart` injects memory. `Stop` captures session boundaries. You don't invoke hooks. They just run.

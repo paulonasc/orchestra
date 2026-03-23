@@ -64,6 +64,7 @@ Store the resolved path. All paths below are relative to this `.orchestra/` root
 | `/o plan` | `cat plan` | Show the plan for the active thread |
 | `/o import` | `cp` | Import external docs (plans, research, specs) into a thread |
 | `/o docs` | `lint` | Audit repo docs against recent changes, fix what's stale |
+| `/o checkpoint` | `save` | Flush all context to disk — compaction-proof snapshot |
 | `/o update` | `apt upgrade` | Pull latest Orchestra and sync all repos |
 
 ### `/o` — Executive dashboard
@@ -148,7 +149,7 @@ Render as:
 ```
 ───
 /o list (all threads)  ·  /o <thread> (deep dive)  ·  /o plan (view plan)
-/o import (bring in docs)  ·  /o docs (audit docs)  ·  /o update (upgrade)
+/o import (bring in docs)  ·  /o docs (audit docs)  ·  /o checkpoint (save)
 or just ask about any milestone
 💡 <contextual hint>
 ```
@@ -328,6 +329,31 @@ Scans all documentation in the repo (and linked repos) against recent changes. F
 - Preserve the doc's existing style and voice
 - If a doc references code, verify the references are still valid (file paths, function names, CLI commands)
 - Track the last audit date in `state/session-context.md` so subsequent runs only check new changes
+
+### `/o checkpoint` — Save everything to disk
+
+Force-flush all in-flight context to Orchestra files. Use before stepping away, before a long operation, or whenever you want a compaction-proof snapshot.
+
+**Write ALL of these:**
+
+1. **`state/session-context.md`** — full snapshot of current state: what you're working on, key context, decisions made, current progress, next steps
+2. **`state/progress.yaml`** — ensure all item statuses reflect reality right now
+3. **`verification.md`** — record any test results from this session not yet captured
+4. **`conversation.md`** — append any design decisions or important discussion from this session
+5. **`memory/YYYY-MM-DD.md`** — log what was accomplished so far today
+6. **`MEMORY.md`** — if you learned anything durable this session (patterns, gotchas, preferences), write it now
+
+After writing, confirm:
+```
+Checkpoint saved:
+  ✓ session-context.md — working on M0.11, terraform plan passed, Route53 blocker
+  ✓ progress.yaml — M0.8 done, M0.11 blocked
+  ✓ verification.md — 2 new results recorded
+  ✓ daily log — 3 entries added
+  ✓ MEMORY.md — added AWS region preference
+```
+
+**This is the "save game" button.** Everything needed to resume from scratch is now on disk. If compaction happens or the session ends, nothing is lost.
 
 ### `/o update` — Upgrade Orchestra
 
