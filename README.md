@@ -17,7 +17,7 @@ It is:
 - A **directory convention** (`.orchestra/`)
 - A **setup script**
 
-Install once, works everywhere. Same pattern as [gstack](https://github.com/gstackio/gstack).
+Install once, works everywhere. Same pattern as [gstack](https://github.com/garrytan/gstack/).
 
 ## How it works
 
