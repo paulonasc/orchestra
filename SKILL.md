@@ -3,6 +3,23 @@ name: o
 description: Multi-agent coordination through files. Memory, threads, briefings, handoffs.
 ---
 
+## Preamble (run first)
+
+```bash
+_UPD=$(__ORCHESTRA_BIN__/orchestra-update-check 2>/dev/null || true)
+[ -n "$_UPD" ] && echo "$_UPD" || true
+```
+
+If output shows `UPGRADE_AVAILABLE <old> <new>`: tell the user "Orchestra update available: v{old} → v{new}" and ask if they want to update now. If yes, run:
+
+```bash
+cd __ORCHESTRA_DIR__ && git pull origin main && ./setup link "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+```
+
+Then tell the user "Updated to v{new}" and continue. If no, continue without updating.
+
+If no output, Orchestra is up to date — continue silently.
+
 # Orchestra
 
 You are an AI agent using Orchestra — a file-based coordination system. You read from and write to `.orchestra/`. Hooks handle lifecycle capture automatically (session start/stop, daily logs). You handle the intelligence: creating threads, writing memory, generating briefings, recording decisions.
@@ -45,6 +62,18 @@ Next steps:
 
 Suggest concrete next steps based on what you see. If nothing is active, ask what the user wants to work on.
 
+### Post-work audit
+
+When the user invokes `/o` after agents have finished work (handoffs exist, progress updated), also audit Orchestra state:
+
+1. Read all `verification.md` files for active threads — flag any with FAILs or PENDINGs
+2. Check if MEMORY.md was updated with new learnings
+3. Check if decisions made during work were recorded in `decisions/`
+4. Check if `sessions/` has a log for significant work
+5. Flag anything stale or missing and offer to update it
+
+This is how the user keeps Orchestra honest after parallel agent runs.
+
 ## Memory
 
 ### MEMORY.md — curated long-term memory
@@ -83,6 +112,7 @@ When the user describes new work ("I want to build X", "we need to fix Y"), crea
 3. Create `threads/NNN-slug/` with:
    - `spec.md` — what to build, acceptance criteria, constraints
    - `conversation.md` — design discussion log (append-only)
+   - `verification.md` — test checklist and results (created when work begins)
    - `research.md` — optional, create when research is needed
 4. Update `state/active-thread.md` with the thread name
 
@@ -98,6 +128,50 @@ When the user describes new work ("I want to build X", "we need to fix Y"), crea
 - Always include `last_verified: YYYY-MM-DD` at the top of research files
 - If `research.md` is older than 7 days and you are about to build from it, flag it to the user and offer to re-verify before proceeding
 - Subagent research is auto-logged via the SubagentStop hook
+
+## Verification
+
+Every thread has a `verification.md` that tracks whether the work actually works. This is the gate between "code was written" and "done."
+
+### Flow
+
+1. When `spec.md` defines acceptance criteria, create `verification.md` with a checklist mirroring those criteria
+2. As work is built, test each item and record the result
+3. A progress item can only be marked `done` when ALL checklist items PASS
+4. If an item fails, record why and how it was resolved
+
+### Format
+
+```markdown
+# Verification: NNN-thread-name
+
+## Checklist
+- [x] Item from spec — PASS
+- [ ] Another item — FAIL (see below)
+- [ ] Not yet tested — PENDING
+
+## Results
+
+### Item from spec
+**Status:** PASS
+**How tested:** What command was run, what was checked
+**Date:** YYYY-MM-DD
+
+### Another item
+**Status:** FAIL
+**How tested:** What was attempted
+**Failure:** What went wrong and why
+**Resolution:** How it was fixed (commit, file, change)
+**Retested:** PASS (YYYY-MM-DD)
+```
+
+### Rules
+
+- Checklist items map 1:1 to acceptance criteria in `spec.md`
+- Every FAIL must include: what happened, why, and how it was resolved
+- PENDING means not yet tested — work is not done
+- **Do NOT mark a progress item as `done` until all verification items PASS.** If you write a handoff saying "done" but `verification.md` has FAILs or PENDINGs, you did it wrong.
+- Receiving agents should read `verification.md` to know what's validated vs just claimed
 
 ## Decisions
 
@@ -162,10 +236,13 @@ List the exact files the agent should read before starting.
 ## Tests required
 What tests to write. Specific scenarios to cover.
 
+## Verification
+How to test each acceptance criterion. Specific commands, expected outputs.
+
 ## When done
+- Update `verification.md` with test results — all items must PASS
 - Write handoff to `handoffs/`
 - Update `state/progress.yaml`
-- Run [specific verification commands]
 ```
 
 ## Handoffs

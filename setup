@@ -165,16 +165,29 @@ cmd_link() {
 
   bold "Linking $(basename "$repo_path") → $orch_dir"
 
-  # Write .orchestra.link
+  # Write .orchestra.link (machine-specific, should not be committed)
   echo "root: $orch_dir" > "$repo_path/.orchestra.link"
   echo "  Created $repo_path/.orchestra.link"
+
+  # Add .orchestra.link to repo's .gitignore if not already there
+  if [ -f "$repo_path/.gitignore" ]; then
+    if ! grep -qxF '.orchestra.link' "$repo_path/.gitignore"; then
+      echo '.orchestra.link' >> "$repo_path/.gitignore"
+      echo "  Added .orchestra.link to .gitignore"
+    fi
+  else
+    echo '.orchestra.link' > "$repo_path/.gitignore"
+    echo "  Created .gitignore with .orchestra.link"
+  fi
 
   # Install hooks in repo's .claude/settings.json
   install_hooks "$repo_path"
 
-  # Copy SKILL.md into repo's .claude/skills/o/
+  # Copy SKILL.md into repo's .claude/skills/o/ (template bin path)
   mkdir -p "$repo_path/.claude/skills/o"
-  cp "$ORCHESTRA_DIR/SKILL.md" "$repo_path/.claude/skills/o/SKILL.md"
+  sed -e "s|__ORCHESTRA_BIN__|${ORCHESTRA_DIR}/bin|g" \
+      -e "s|__ORCHESTRA_DIR__|${ORCHESTRA_DIR}|g" \
+    "$ORCHESTRA_DIR/SKILL.md" > "$repo_path/.claude/skills/o/SKILL.md"
   echo "  Installed skill pack to .claude/skills/o/"
 
   echo ""

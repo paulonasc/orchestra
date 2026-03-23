@@ -26,7 +26,8 @@ You describe work         →  agent creates a thread
 Research together          →  agent writes the spec
 "Let's build it"          →  agent generates briefings per repo
 Agents work in parallel   →  hooks auto-capture progress
-You come back             →  "what happened?" → full context restored
+Agents verify their work  →  verification.md tracks pass/fail
+You come back             →  /o shows status, flags gaps, audits docs
 ```
 
 No orchestration server. No message queue. Files on disk, read by agents.
@@ -60,8 +61,8 @@ git clone https://github.com/orchestrahq/orchestra.git ~/.orchestra
 ```
 
 Each linked repo gets:
-- `.orchestra.link` — one-line pointer to the shared `.orchestra/` directory
-- `.claude/skills/orchestra/SKILL.md` — the `/o` command
+- `.orchestra.link` — one-line pointer to the shared `.orchestra/` directory (auto-gitignored, contains absolute paths)
+- `.claude/skills/o/SKILL.md` — the `/o` command
 - `.claude/settings.json` — lifecycle hooks installed
 
 ## Directory structure
@@ -85,6 +86,7 @@ Orchestra uses a single `.orchestra/` directory at your project root (or a share
 ├── threads/                # units of work
 │   ├── compress-video-pipeline/
 │   │   ├── spec.md
+│   │   ├── verification.md
 │   │   ├── research.md
 │   │   └── conversation.md
 │   └── auth-migration/
@@ -120,7 +122,11 @@ Both are auto-injected at session start. You never type "here's the context."
 
 ### Threads
 
-A thread is any unit of work — a feature, a bug, a spike, an investigation. It lives in `threads/<name>/` and contains everything: spec, research, conversation history. Threads are the unit of planning and the input to briefing generation.
+A thread is any unit of work — a feature, a bug, a spike, an investigation. It lives in `threads/<name>/` and contains everything: spec, verification, research, conversation history. Threads are the unit of planning and the input to briefing generation.
+
+### Verification
+
+Every thread has a `verification.md` that tracks whether the work actually works. Checklist items map 1:1 to acceptance criteria in `spec.md`. Each item is PASS, FAIL, or PENDING — with evidence. A progress item can't be marked `done` until all verification items PASS. This is the gate between "code was written" and "done."
 
 ### Briefings
 
@@ -172,6 +178,12 @@ Orchestra is agent-agnostic. It works with anything that reads files.
 # pied-piper-api/.orchestra.link
 root: /Users/richard/Projects/pied-piper/.orchestra
 ```
+
+## Auto-update
+
+Orchestra checks for updates when you invoke `/o`. If a newer version exists on GitHub, the agent tells you and asks if you want to update. Updates are a `git pull` + re-link — takes seconds, no data lost.
+
+To check manually: `~/.orchestra/bin/orchestra-update-check`
 
 ## The insight
 

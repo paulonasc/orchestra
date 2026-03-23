@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# orchestra-update-check — periodic version check.
+#
+# Output (one line, or nothing):
+#   UPGRADE_AVAILABLE <local> <remote>  — remote VERSION differs from local
+#   (nothing)                           — up to date or check skipped
+#
+# Env overrides (for testing):
+#   ORCHESTRA_INSTALL_DIR   — override auto-detected orchestra root
+#   ORCHESTRA_REMOTE_URL    — override remote VERSION URL
+#   ORCHESTRA_STATE_DIR     — override ~/.orchestra-state directory
+set -euo pipefail
+
+ORCHESTRA_DIR="${ORCHESTRA_INSTALL_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+STATE_DIR="${ORCHESTRA_STATE_DIR:-$HOME/.orchestra-state}"
+CACHE_FILE="$STATE_DIR/last-update-check"
+VERSION_FILE="$ORCHESTRA_DIR/VERSION"
+REMOTE_URL="${ORCHESTRA_REMOTE_URL:-https://raw.githubusercontent.com/orchestrahq/orchestra/main/VERSION}"
+
+# How often to check (seconds). Default: 6 hours.
+CHECK_INTERVAL="${ORCHESTRA_CHECK_INTERVAL:-21600}"
+
+# ─── Read local version ──────────────────────────────────────
+if [ ! -f "$VERSION_FILE" ]; then
+  exit 0  # no VERSION file = dev install, skip check
+fi
+LOCAL="$(tr -d '[:space:]' < "$VERSION_FILE")"
+
+# ─── Check cache first (avoid hammering GitHub) ──────────────
+mkdir -p "$STATE_DIR"
+
+if [ -f "$CACHE_FILE" ]; then
+  CACHE_AGE=0
+  if stat -f %m "$CACHE_FILE" >/dev/null 2>&1; then
+    # macOS
+    CACHE_EPOCH=$(stat -f %m "$CACHE_FILE")
+  elif stat -c %Y "$CACHE_FILE" >/dev/null 2>&1; then
+    # Linux
+    CACHE_EPOCH=$(stat -c %Y "$CACHE_FILE")
+  else
+    CACHE_EPOCH=0
+  fi
+  NOW=$(date +%s)
+  CACHE_AGE=$((NOW - CACHE_EPOCH))
+
+  if [ "$CACHE_AGE" -lt "$CHECK_INTERVAL" ]; then
+    # Cache is fresh — replay cached result
+    CACHED="$(cat "$CACHE_FILE")"
+    case "$CACHED" in
+      UPGRADE_AVAILABLE*) echo "$CACHED" ;;
+    esac
+    exit 0
+  fi
+fi
+
+# ─── Fetch remote version ────────────────────────────────────
+REMOTE="$(curl -sf --max-time 5 "$REMOTE_URL" 2>/dev/null || true)"
+REMOTE="$(echo "$REMOTE" | tr -d '[:space:]')"
+
+# Validate: must look like a version number
+if ! echo "$REMOTE" | grep -qE '^[0-9]+\.[0-9.]+$'; then
+  echo "UP_TO_DATE $LOCAL" > "$CACHE_FILE"
+  exit 0
+fi
+
+if [ "$LOCAL" = "$REMOTE" ]; then
+  echo "UP_TO_DATE $LOCAL" > "$CACHE_FILE"
+  exit 0
+fi
+
+# Versions differ
+echo "UPGRADE_AVAILABLE $LOCAL $REMOTE" > "$CACHE_FILE"
+echo "UPGRADE_AVAILABLE $LOCAL $REMOTE"
