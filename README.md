@@ -212,6 +212,8 @@ Orchestra is agent-agnostic. It works with anything that reads files.
 root: /Users/richard/Projects/pied-piper/.orchestra
 ```
 
+**Worktrees** — git worktrees work with zero setup. `.orchestra.link` is gitignored (machine-specific paths), so worktrees don't have it. Orchestra detects this automatically: if `.orchestra.link` is missing, it checks the main worktree for the link file. Agents in worktrees get full Orchestra context — threads, memory, progress, everything.
+
 ## Auto-sync & Auto-update
 
 **Auto-sync (local):** Every `/o` invocation checks if the installed SKILL.md is stale compared to the source in the Orchestra repo. If so, it re-installs automatically — no manual `setup sync` needed. Edit Orchestra once, every linked repo picks it up on next `/o`.

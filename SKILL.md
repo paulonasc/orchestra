@@ -31,14 +31,21 @@ You are an AI agent using Orchestra — a file-based coordination system. You re
 
 ## Finding the Orchestra root
 
-Read `.orchestra.link` in the current repo root to find the `.orchestra/` directory path.
+Resolve the `.orchestra/` path using this fallback chain:
+
+1. **`.orchestra/`** exists in the current repo root → use it directly
+2. **`.orchestra.link`** exists in the current repo root → read the `root:` path
+3. **Worktree fallback** — if neither exists, check if you're in a git worktree:
+   ```bash
+   _MAIN_WT=$(git worktree list --porcelain 2>/dev/null | head -1 | sed 's/^worktree //')
+   ```
+   If `_MAIN_WT` differs from the current directory, check `$_MAIN_WT/.orchestra.link`. This means worktrees get full Orchestra context with zero setup.
+4. If all three fail, Orchestra is not set up for this repo — tell the user.
 
 ```yaml
 # .orchestra.link
 root: /Users/richard/Projects/pied-piper/.orchestra
 ```
-
-If `.orchestra/` exists directly in the repo root, use that. If neither `.orchestra/` nor `.orchestra.link` exists, Orchestra is not set up for this repo — tell the user.
 
 Store the resolved path. All paths below are relative to this `.orchestra/` root.
 
