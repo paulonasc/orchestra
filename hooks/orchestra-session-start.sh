@@ -67,6 +67,8 @@ fi
 
 # 5. Behavioral reminders — short, always present
 echo "=== ORCHESTRA RULES (always active) ==="
+echo "- BEFORE coding: save your research/plan to .orchestra/ thread files first. No code before the plan is written."
+echo "- AFTER researching: write findings to conversation.md + update session-context.md. Research that isn't saved dies at compaction."
 echo "- When you make or accept a decision (tool, architecture, infra, approach): record it in .orchestra/decisions/ immediately"
 echo "- When you discover a gotcha or workaround: add it to .orchestra/MEMORY.md immediately"
 echo "- When you change behavior that's documented (API, commands, config, deploy): update the docs NOW, not later"

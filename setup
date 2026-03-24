@@ -136,19 +136,34 @@ GIEOF
 # ============================================================
 # Inject Orchestra rules into agent instruction files
 # ============================================================
-ORCHESTRA_RULES_MARKER="## Orchestra — Agent Awareness Rules"
+ORCHESTRA_RULES_START="<!-- orchestra-rules-start -->"
+ORCHESTRA_RULES_END="<!-- orchestra-rules-end -->"
+# Legacy marker for migration from old format
+ORCHESTRA_RULES_LEGACY_MARKER="## Orchestra — Agent Awareness Rules"
 
 orchestra_rules_block() {
   cat << 'RULESEOF'
 
+<!-- orchestra-rules-start -->
 ## Orchestra — Agent Awareness Rules
 
 This repo uses Orchestra for multi-agent coordination. The `/o` command shows project status. Memory, progress, and context are auto-injected via hooks at session start.
 
-**After these actions, IMMEDIATELY update Orchestra state before responding:**
+### BLOCKING rules — do these BEFORE moving on
+
+These are not optional post-hoc updates. They are gates. Do not proceed to the next phase until the Orchestra update is done.
+
+| Before you... | Do this FIRST |
+|---|---|
+| Start implementing/coding | Write your plan to `.orchestra/threads/<thread>/plan.md` (or update it). If you just finished researching, save findings to `conversation.md` or `research-*.md`. The plan must exist in Orchestra before the first line of code. |
+| Spawn a subagent for implementation | Update `session-context.md` with what you're about to build and why. The subagent has no memory — Orchestra is how it gets context. |
+| Move to the next milestone | Verify the current milestone is updated in `progress.yaml` + `verification.md` first. |
+
+### IMMEDIATE rules — do these right after the action
 
 | After you... | Update these files |
 |---|---|
+| Finish researching (reading code, exploring, scanning) | `conversation.md` (append findings) + `session-context.md` (update current state) |
 | Commit or push code | `session-context.md` + `memory/YYYY-MM-DD.md` |
 | Merge a PR | `progress.yaml` + daily log → prompt `/o close` if thread is done |
 | Make an architecture/infra/tool decision | `decisions/NNN-slug.md` + `MEMORY.md` |
@@ -156,8 +171,42 @@ This repo uses Orchestra for multi-agent coordination. The `/o` command shows pr
 | Change documented behavior (API, config, deploy) | Update the relevant repo doc NOW |
 | Complete a milestone item | `progress.yaml` + `verification.md` + check if docs need updating |
 
+**Why this matters:** Research you don't save is research that dies at compaction. Plans you don't write to Orchestra are invisible to the next session. If it's not in `.orchestra/`, it didn't happen.
+
 **Claude Code users:** Heartbeat (automatic state checks every 30 min) is enabled automatically on session start via hooks. No manual setup needed.
+<!-- orchestra-rules-end -->
 RULESEOF
+}
+
+# Replace the Orchestra rules block in a file using start/end markers.
+# Handles three cases: new markers, legacy marker (marker-to-EOF), no markers (append).
+_replace_rules_block() {
+  local file="$1"
+  local tmp_file
+
+  if grep -qF "$ORCHESTRA_RULES_START" "$file"; then
+    # New format: replace between start and end markers (inclusive)
+    tmp_file="$(mktemp)"
+    awk -v start="$ORCHESTRA_RULES_START" -v end="$ORCHESTRA_RULES_END" '
+      $0 ~ start { skip=1; next }
+      $0 ~ end   { skip=0; next }
+      !skip { print }
+    ' "$file" > "$tmp_file"
+    orchestra_rules_block >> "$tmp_file"
+    mv "$tmp_file" "$file"
+    return 0  # updated
+  elif grep -qF "$ORCHESTRA_RULES_LEGACY_MARKER" "$file"; then
+    # Legacy format: old marker-to-EOF — migrate to new format
+    tmp_file="$(mktemp)"
+    sed "/$ORCHESTRA_RULES_LEGACY_MARKER/,\$d" "$file" > "$tmp_file"
+    orchestra_rules_block >> "$tmp_file"
+    mv "$tmp_file" "$file"
+    return 0  # updated (migrated)
+  else
+    # No markers — first injection
+    orchestra_rules_block >> "$file"
+    return 1  # injected
+  fi
 }
 
 inject_instruction_rules() {
@@ -166,25 +215,19 @@ inject_instruction_rules() {
   # Claude Code — CLAUDE.md
   local claude_md="$repo/CLAUDE.md"
   if [ -f "$claude_md" ]; then
-    if ! grep -qF "$ORCHESTRA_RULES_MARKER" "$claude_md"; then
-      orchestra_rules_block >> "$claude_md"
-      echo "  Injected Orchestra rules into CLAUDE.md"
-    else
-      # Update existing block — remove old, append new
-      local tmp_file
-      tmp_file="$(mktemp)"
-      sed "/$ORCHESTRA_RULES_MARKER/,\$d" "$claude_md" > "$tmp_file"
-      orchestra_rules_block >> "$tmp_file"
-      mv "$tmp_file" "$claude_md"
+    if _replace_rules_block "$claude_md"; then
       echo "  Updated Orchestra rules in CLAUDE.md"
+    else
+      echo "  Injected Orchestra rules into CLAUDE.md"
     fi
   fi
 
   # Codex — AGENTS.md
   local agents_md="$repo/AGENTS.md"
   if [ -f "$agents_md" ]; then
-    if ! grep -qF "$ORCHESTRA_RULES_MARKER" "$agents_md"; then
-      orchestra_rules_block >> "$agents_md"
+    if _replace_rules_block "$agents_md"; then
+      echo "  Updated Orchestra rules in AGENTS.md"
+    else
       echo "  Injected Orchestra rules into AGENTS.md"
     fi
   fi
@@ -200,8 +243,9 @@ inject_instruction_rules() {
   # OpenCode — .opencode/instructions.md
   local opencode_md="$repo/.opencode/instructions.md"
   if [ -f "$opencode_md" ]; then
-    if ! grep -qF "$ORCHESTRA_RULES_MARKER" "$opencode_md"; then
-      orchestra_rules_block >> "$opencode_md"
+    if _replace_rules_block "$opencode_md"; then
+      echo "  Updated Orchestra rules in .opencode/instructions.md"
+    else
       echo "  Injected Orchestra rules into .opencode/instructions.md"
     fi
   fi
