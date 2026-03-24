@@ -401,17 +401,21 @@ Checkpoint saved:
 
 ### `/o heartbeat` — Periodic state audit
 
-Lightweight check that audits whether Orchestra state is current and fixes gaps. **Auto-schedules itself** — the user runs it once, and it recurs every 10 minutes for the rest of the session.
+Lightweight check that audits whether Orchestra state is current and fixes gaps. **Fully automatic** — the user never manages this. It sets itself up on session start, renews itself before expiry, and re-enables after compaction.
+
+**How the user experiences it:** They don't. The `SessionStart` hook tells the agent to run `/o heartbeat` on every new session. The agent does it silently. The user just sees occasional one-line status messages in their session.
 
 **Usage:**
 - `/o heartbeat` — audit now + auto-schedule recurring checks every 10 minutes
-- `/o heartbeat stop` — cancel the recurring schedule
+- `/o heartbeat stop` — cancel the recurring schedule (rare — only if user explicitly wants it off)
+
+**Scope:** Per-session, not per-repo. CronCreate jobs are scoped to the Claude Code session. Every new session in any linked repo auto-sets up its own heartbeat via the SessionStart hook. The user opens Claude Code anywhere, heartbeat is running within seconds.
 
 **Lifecycle:**
 
 1. **First invocation in a session** — runs the audit AND schedules recurring runs via `CronCreate` (every 10 minutes, `*/10 * * * *`). Confirm:
    ```
-   Heartbeat: updated session-context, added decision 007. Scheduled every 10 min (auto-expires after 3 days).
+   Heartbeat: updated session-context, added decision 007. Scheduled every 10 min.
    ```
 
 2. **Subsequent runs (from cron)** — audit only, one-line output:
@@ -423,20 +427,39 @@ Lightweight check that audits whether Orchestra state is current and fixes gaps.
    Heartbeat: added decision 008, updated progress M0.12→done.
    ```
 
-3. **Already scheduled** — if `state/session-context.md` has `heartbeat_scheduled: true`, skip scheduling and just audit. Prevents double-scheduling.
+3. **Already scheduled (same session)** — to prevent double-scheduling within the same session, check TWO things:
+   - `state/session-context.md` has `heartbeat_scheduled: true`
+   - AND `heartbeat_created_at` is within the last few hours (not stale from a prior session)
+   If both conditions are true, skip scheduling and just audit. If `heartbeat_created_at` is missing or older than 12 hours, the flag is stale — re-create the cron job.
 
-4. **`/o heartbeat stop`** — cancel via `CronDelete` using the stored job ID. Remove `heartbeat_scheduled` from session-context. Confirm: `Heartbeat schedule cancelled.`
+   **IMPORTANT:** CronCreate jobs are session-scoped. They die when the session ends. The `heartbeat_scheduled: true` flag in session-context persists across sessions but the cron does not. On session start, always create a fresh cron regardless of what the file says. The SessionStart hook handles this by always instructing `/o heartbeat`.
+
+4. **Self-renewal** — CronCreate jobs expire after 3 days (platform limit). On every heartbeat run, check `heartbeat_created_at` in session-context. If the job is older than **2 days 20 hours** (leaving a 4-hour buffer):
+   - Cancel the old job via `CronDelete`
+   - Create a new one via `CronCreate`
+   - Update `heartbeat_job_id` and `heartbeat_created_at` in session-context
+   - Report silently (no user-facing expiry message)
+   The user never sees an expiration. The heartbeat silently keeps itself alive.
+
+5. **Post-compaction** — the `PostCompact` hook always tells the agent to re-enable heartbeat (CronCreate state doesn't survive compaction). This is automatic.
+
+6. **`/o heartbeat stop`** — cancel via `CronDelete` using the stored job ID. Remove `heartbeat_scheduled`, `heartbeat_job_id`, and `heartbeat_created_at` from session-context. Confirm: `Heartbeat schedule cancelled.`
 
 **Scheduling implementation:**
 
-On first run, use the `CronCreate` tool:
+On first run (or session start), use the `CronCreate` tool:
 ```
 CronCreate(cron: "*/10 * * * *", prompt: "/o heartbeat", recurring: true)
 ```
 
-Store the returned job ID in `state/session-context.md` as `heartbeat_job_id: <id>`. Set `heartbeat_scheduled: true`.
+Store in `state/session-context.md`:
+- `heartbeat_scheduled: true`
+- `heartbeat_job_id: <id>`
+- `heartbeat_created_at: <ISO 8601 timestamp>`
 
-On `/o heartbeat stop`, use `CronDelete` with the stored job ID.
+On self-renewal, delete old job, create new one, update all three fields.
+
+On `/o heartbeat stop`, use `CronDelete` with the stored job ID. Remove all three fields.
 
 **The audit (fast — under 30 seconds):**
 
@@ -455,16 +478,7 @@ On `/o heartbeat stop`, use `CronDelete` with the stored job ID.
 - Don't ask the user questions. Fix what you can silently, report what you did.
 - From cron, the output appears in the session automatically. The user sees it and can correct if needed.
 - This is the "git status" of Orchestra — quick, informational, occasionally catches drift.
-
-**When to suggest heartbeat (proactive):**
-
-If you detect stale Orchestra state (session-context outdated, decisions missing, daily log gaps) during a normal `/o` dashboard view, add this as the contextual hint:
-
-```
-💡 State drift detected — run /o heartbeat to enable automatic checks
-```
-
-Only suggest once per session. Track in `state/session-context.md`.
+- Don't mention expiry to the user. Self-renewal is silent. The only user-facing message about scheduling is on first setup: "Scheduled every 10 min."
 
 ### `/o close` — Mark thread as completed
 
@@ -566,6 +580,10 @@ If the changelog script returns content, present it to the user as "What's new i
 - `action: suggest` — show the prompt to the user and ask if they want to try it. Don't auto-run.
 
 If no changelog output (same version or no entries), just report: "Orchestra is up to date (v{version})."
+
+**Step 4 — Enable heartbeat (automatic):**
+
+After update completes, check if heartbeat is scheduled (look for `heartbeat_scheduled: true` in `state/session-context.md`). If not, run `/o heartbeat` automatically. Don't ask the user — just do it. This ensures every updated session has automatic state checks.
 
 ### Post-work audit
 

@@ -156,7 +156,7 @@ This repo uses Orchestra for multi-agent coordination. The `/o` command shows pr
 | Change documented behavior (API, config, deploy) | Update the relevant repo doc NOW |
 | Complete a milestone item | `progress.yaml` + `verification.md` + check if docs need updating |
 
-**Claude Code users:** Run `/o heartbeat` once to enable automatic state checks every 10 min.
+**Claude Code users:** Heartbeat (automatic state checks every 10 min) is enabled automatically on session start via hooks. No manual setup needed.
 RULESEOF
 }
 

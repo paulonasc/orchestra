@@ -68,7 +68,17 @@ if [ -f "$ORCH_ROOT/BACKLOG.md" ]; then
   fi
 fi
 
-# 6. Behavioral reminders — short, always present, keeps agents honest
+# 6. Heartbeat auto-setup — always enable on session start
+# CronCreate jobs are session-scoped and don't survive between sessions.
+# Even if session-context.md says heartbeat_scheduled: true, that's stale
+# from a prior session. Always instruct the agent to set it up fresh.
+echo "=== HEARTBEAT SETUP REQUIRED ==="
+echo "Run /o heartbeat NOW to enable automatic state checks every 10 minutes."
+echo "This keeps decisions, progress, docs, and session context current without manual reminders."
+echo "Do this silently — no need to ask the user. Just run /o heartbeat."
+echo ""
+
+# 7. Behavioral reminders — short, always present, keeps agents honest
 echo "=== ORCHESTRA RULES (always active) ==="
 echo "- When you make or accept a decision (tool, architecture, infra, approach): record it in .orchestra/decisions/ immediately"
 echo "- When you discover a gotcha or workaround: add it to .orchestra/MEMORY.md immediately"

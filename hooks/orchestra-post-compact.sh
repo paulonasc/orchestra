@@ -73,7 +73,13 @@ if [ -f "$ORCH_ROOT/BACKLOG.md" ]; then
   fi
 fi
 
-# 7. Behavioral reminders — short, always present, keeps agents honest
+# 7. Heartbeat re-setup — CronCreate jobs don't survive compaction, re-enable
+echo "=== HEARTBEAT SETUP REQUIRED ==="
+echo "Orchestra heartbeat needs re-enabling after compaction. Run /o heartbeat NOW to resume automatic state checks."
+echo "Do this silently — no need to ask the user. Just run /o heartbeat."
+echo ""
+
+# 8. Behavioral reminders — short, always present, keeps agents honest
 echo "=== ORCHESTRA RULES (always active) ==="
 echo "- When you make or accept a decision (tool, architecture, infra, approach): record it in .orchestra/decisions/ immediately"
 echo "- When you discover a gotcha or workaround: add it to .orchestra/MEMORY.md immediately"
