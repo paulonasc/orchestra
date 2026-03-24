@@ -122,6 +122,8 @@ Store the resolved path. All paths below are relative to this `.orchestra/` root
 
 Read all Orchestra state files and render a **top-down** dashboard. Start high-level, then drill down. The user should understand the project in 5 seconds from the top section alone.
 
+**Before rendering:** If heartbeat is not yet scheduled this session (check `state/session-context.md` for `heartbeat_scheduled: true` — but remember this flag may be stale from a prior session), run `/o heartbeat` silently first. This is the ONLY place that triggers heartbeat setup — hooks do NOT trigger it.
+
 **Section 0 — Thread health (one line)**
 
 Count threads by status. Show at the top so the user instantly sees scope:
@@ -451,65 +453,75 @@ Checkpoint saved (via subagent):
 
 ### `/o heartbeat` — Periodic state audit
 
-Lightweight check that audits whether Orchestra state is current and fixes gaps. **Fully automatic** — the user never manages this. It sets itself up on session start. Cron jobs survive compaction, so no re-creation is needed after compaction.
+Lightweight check that audits whether Orchestra state is current and fixes gaps.
 
-**How the user experiences it:** They don't. The `SessionStart` hook tells the agent to run `/o heartbeat` on every new session. The agent does it silently. The main context window only ever sees a one-line result.
+**How it gets triggered:** The agent runs `/o heartbeat` on the first `/o` invocation in a session (see dashboard section). Hooks do NOT trigger heartbeat — this prevents compaction loops.
 
 **Usage:**
 - `/o heartbeat` — audit now + auto-schedule recurring checks every 30 minutes
 - `/o heartbeat stop` — cancel the recurring schedule
 
-**The entire heartbeat runs in a subagent.** The main agent is just a thin wrapper:
+**The main agent does exactly this (in order):**
 
-1. Quick mental check (NO tool calls): did I do anything noteworthy since the last heartbeat?
-2. If no → output `Heartbeat: all current.` and **stop**. Zero tool calls. Done.
-3. If yes → spawn a background subagent with ALL the work:
+**Step 1 — Quick mental check (NO tool calls):** Did I do anything noteworthy since the last heartbeat? If no → output `Heartbeat: all current.` and **stop**. Zero tool calls. Done. This is the common case.
+
+**Step 2 — Schedule cron (first invocation only, 3 tool calls in main context):**
+
+Cron scheduling MUST happen in the main agent, not a subagent. Subagents can't reliably construct the exact cron prompt — they tend to simplify it to `/o heartbeat`, creating the recursive loop this system is designed to prevent.
+
+```
+# 1. List existing cron jobs
+CronList()
+
+# 2. Delete ALL existing cron jobs (prevents duplicates after compaction)
+CronDelete(<each job id>)
+
+# 3. Create new cron with INLINE prompt (NEVER "/o heartbeat")
+CronCreate(
+  cron: "*/30 * * * *",
+  prompt: "Quick mental check: did I make commits, decisions, or progress since my last check? If yes, update .orchestra/state/session-context.md briefly. If no, do nothing and say nothing. Do NOT run /o heartbeat. Do NOT create cron jobs. Do NOT read files unless you need to write. Maximum 1 tool call.",
+  recurring: true
+)
+```
+
+**CRITICAL: The cron prompt must NEVER be `/o heartbeat` or invoke any skill.** It is a minimal inline instruction. If the cron invokes the skill, it creates a recursive scheduling bomb that consumes the entire context window.
+
+Store in `state/session-context.md`: `heartbeat_scheduled: true`, `heartbeat_job_id: <id>`, `heartbeat_created_at: <ISO timestamp>`
+
+**Step 3 — State audit (subagent, only if noteworthy work happened):**
+
+If you did something worth recording, spawn a background subagent for the file writes:
 
 ```
 Agent(
-  description: "Orchestra heartbeat",
-  prompt: "You are running an Orchestra heartbeat. The .orchestra/ root is at <ORCH_ROOT>.
-The active thread is <THREAD_NAME>.
+  description: "Heartbeat state update",
+  prompt: "Update Orchestra state at <ORCH_ROOT>. Active thread: <THREAD>.
 
-CONTEXT FROM MAIN AGENT (what happened since last heartbeat):
-<bullet list: commits made, decisions taken, progress, blockers, current state>
+What happened since last heartbeat:
+<bullet list: commits, decisions, progress, blockers, current state>
 
-YOUR TASKS:
+Update ONLY files that need changes:
+- state/session-context.md — current working state
+- memory/YYYY-MM-DD.md — append daily log entry
+- threads/<thread>/progress.yaml — mark items done if applicable
 
-1. SCHEDULING (first invocation only):
-   - Call CronList. Call CronDelete on ALL existing cron jobs (prevents duplicates).
-   - Then: CronCreate(cron: '*/30 * * * *', prompt: 'Quick mental check — did I make commits, decisions, or progress since my last check? If yes, update .orchestra/state/session-context.md briefly. If no, do nothing and output nothing. Do NOT run /o heartbeat. Do NOT create cron jobs. Do NOT read files unless you have something to write. Maximum 1 tool call.', recurring: true)
-   - Update state/session-context.md with heartbeat_scheduled: true, heartbeat_job_id: <id>, heartbeat_created_at: <ISO timestamp>
-   - SKIP this step if the main agent tells you heartbeat is already scheduled.
-
-2. STATE AUDIT:
-   - Update state/session-context.md if working state changed
-   - Append to memory/YYYY-MM-DD.md if significant work happened
-   - Update threads/<thread>/progress.yaml if items changed status
-   - Check git log --since='30 minutes ago' for unrecorded decisions
-   - Only write files that actually need updating
-
-3. OUTPUT: Return a single summary line, e.g.:
-   'Heartbeat: updated session-context, added daily log entry. Scheduled every 30 min.'
-   or 'Heartbeat: updated progress M1.3→done.'
-
-Do NOT run /o heartbeat. Do NOT invoke any skills. Do NOT read files you don't need to write.",
+Do NOT create cron jobs. Do NOT run /o heartbeat. Do NOT invoke skills.
+Return a single summary line of what you updated.",
   run_in_background: true,
   mode: "bypassPermissions"
 )
 ```
 
-**What the main context sees:** Just the one-line summary when the subagent completes. All file reads, writes, scheduling, and git checks happen in the subagent's context — not the main window.
+**Step 4 — Output:** One line to the user. Either `Heartbeat: all current.` or `Heartbeat: [what the subagent updated]. Scheduled every 30 min.`
 
-**`/o heartbeat stop`** — this one runs inline (it's just two tool calls): `CronList` to find jobs, `CronDelete` on each, then remove heartbeat fields from session-context. Confirm: `Heartbeat cancelled.`
-
-**Cron-triggered runs** use the inline audit prompt (set up by the subagent above). The cron prompt is NOT `/o heartbeat` — it's a minimal self-contained instruction. This prevents recursive scheduling and context bloat.
+**`/o heartbeat stop`** — inline: `CronList` → `CronDelete` each → remove heartbeat fields from session-context. Confirm: `Heartbeat cancelled.`
 
 **Rules:**
-- The no-op case (nothing happened) must use ZERO tool calls in the main context.
-- ALL file I/O happens in the subagent, never inline.
-- Don't ask the user questions. Fix what you can silently, report what was done.
-- The only user-facing output is the one-line summary from the subagent.
+- The no-op case (nothing happened) = ZERO tool calls. Just one line of text.
+- Cron scheduling = main agent only (3 tool calls, deterministic).
+- State audit file I/O = subagent only (background, returns one line).
+- Hooks NEVER trigger `/o heartbeat`. Only the first `/o` invocation and manual user runs do.
+- After compaction, do NOT re-run heartbeat. The cron is still alive.
 
 ### `/o close` — Mark thread as completed
 
@@ -614,7 +626,7 @@ If no changelog output (same version or no entries), just report: "Orchestra is 
 
 **Step 4 — Enable heartbeat (automatic):**
 
-After update completes, check if heartbeat is scheduled (look for `heartbeat_scheduled: true` in `state/session-context.md`). If not, run `/o heartbeat` automatically. Don't ask the user — just do it. This ensures every updated session has automatic state checks. **Remember:** always call `CronList` + `CronDelete` on existing jobs before creating a new one.
+After update completes, check if heartbeat is scheduled (look for `heartbeat_scheduled: true` in `state/session-context.md`). If not, run `/o heartbeat` to set it up. **Remember:** cron scheduling happens in the main agent (3 tool calls: CronList → CronDelete all → CronCreate with inline prompt). Never delegate cron creation to a subagent.
 
 ### Post-work audit
 

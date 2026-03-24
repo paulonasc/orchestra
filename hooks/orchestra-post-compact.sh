@@ -1,94 +1,50 @@
 #!/bin/bash
 # Hook: post-compact
 # Matcher: compact
-# Purpose: Re-inject critical context after conversation compaction
+# Purpose: Re-inject MINIMAL context after conversation compaction
 #
-# Injection order (deliberate — matches agent cognitive flow):
-#   1. Session context — what you were doing RIGHT NOW (most critical after compaction)
-#   2. Memory          — what I know about this project
-#   3. Activity        — what happened recently
-#   4. Thread          — what I'm working on
-#   5. Progress        — where that work stands
-#   6. Backlog         — background reference
+# CRITICAL: This hook must be LIGHTWEIGHT. Every line of output consumes
+# context window. If this hook dumps too much, it pushes context right
+# back to the compaction threshold, creating a compaction loop.
+#
+# Strategy: Show file PATHS and one-line summaries, NOT full file contents.
+# The agent can read files if it needs details.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
 ORCH_ROOT="$(find_orchestra_root)" || exit 0
 
-TODAY="$(date +%Y-%m-%d)"
-YESTERDAY="$(date -v-1d +%Y-%m-%d 2>/dev/null || date -d 'yesterday' +%Y-%m-%d 2>/dev/null)"
-
-echo "=== ORCHESTRA CONTEXT RESTORED AFTER COMPACTION ==="
+echo "=== ORCHESTRA CONTEXT (post-compaction) ==="
 echo ""
 
-# 1. Session context (most critical — this is what the agent was doing)
+# 1. Session context — just the "Working on" and "Next steps" lines
 if [ -f "$ORCH_ROOT/state/session-context.md" ]; then
-  echo "=== SESSION CONTEXT (what you were working on) ==="
-  cat "$ORCH_ROOT/state/session-context.md" 2>/dev/null
-  echo ""
+  echo "Session: $(grep -A1 '## Working on' "$ORCH_ROOT/state/session-context.md" 2>/dev/null | tail -1)"
+  NEXT=$(grep -A1 '## Next steps' "$ORCH_ROOT/state/session-context.md" 2>/dev/null | tail -1)
+  [ -n "$NEXT" ] && echo "Next: $NEXT"
+  echo "  → Read $ORCH_ROOT/state/session-context.md for full context"
 fi
 
-# 2. Project memory
-if [ -f "$ORCH_ROOT/MEMORY.md" ]; then
-  echo "=== PROJECT MEMORY ==="
-  cat "$ORCH_ROOT/MEMORY.md" 2>/dev/null
-  echo ""
-fi
-
-# 3. Recent activity
-if [ -f "$ORCH_ROOT/memory/$TODAY.md" ] || [ -f "$ORCH_ROOT/memory/$YESTERDAY.md" ]; then
-  echo "=== RECENT ACTIVITY ==="
-  cat "$ORCH_ROOT/memory/$TODAY.md" 2>/dev/null
-  cat "$ORCH_ROOT/memory/$YESTERDAY.md" 2>/dev/null
-  echo ""
-fi
-
-# 4. Active thread
-if [ -f "$ORCH_ROOT/state/active-thread.md" ]; then
-  echo "=== ACTIVE THREAD ==="
-  cat "$ORCH_ROOT/state/active-thread.md" 2>/dev/null
-  echo ""
-fi
-
-# 5. Progress — active thread only (per-thread progress.yaml)
+# 2. Active thread — just the thread name
 ACTIVE_THREAD="$(get_active_thread "$ORCH_ROOT")"
-if [ -n "$ACTIVE_THREAD" ] && [ -f "$ORCH_ROOT/threads/$ACTIVE_THREAD/progress.yaml" ]; then
-  echo "=== PROGRESS ($ACTIVE_THREAD) ==="
-  cat "$ORCH_ROOT/threads/$ACTIVE_THREAD/progress.yaml" 2>/dev/null
-  echo ""
-elif [ -f "$ORCH_ROOT/state/progress.yaml" ]; then
-  echo "=== PROGRESS (legacy — run /o to migrate) ==="
-  cat "$ORCH_ROOT/state/progress.yaml" 2>/dev/null
-  echo ""
-fi
-
-# 6. Backlog — background reference, injected last
-if [ -f "$ORCH_ROOT/BACKLOG.md" ]; then
-  BACKLOG_ITEMS="$(grep -c '^- ' "$ORCH_ROOT/BACKLOG.md" 2>/dev/null || echo 0)"
-  if [ "$BACKLOG_ITEMS" -gt 0 ]; then
-    echo "=== BACKLOG ($BACKLOG_ITEMS items) ==="
-    cat "$ORCH_ROOT/BACKLOG.md" 2>/dev/null
-    echo ""
+if [ -n "$ACTIVE_THREAD" ]; then
+  echo "Thread: $ACTIVE_THREAD"
+  # Show progress percentage, not full YAML
+  if [ -f "$ORCH_ROOT/threads/$ACTIVE_THREAD/progress.yaml" ]; then
+    TOTAL=$(grep -c '^ *- name:' "$ORCH_ROOT/threads/$ACTIVE_THREAD/progress.yaml" 2>/dev/null || echo 0)
+    DONE=$(grep -c 'status: done' "$ORCH_ROOT/threads/$ACTIVE_THREAD/progress.yaml" 2>/dev/null || echo 0)
+    echo "Progress: $DONE/$TOTAL items done"
+    echo "  → Read $ORCH_ROOT/threads/$ACTIVE_THREAD/progress.yaml for details"
   fi
 fi
 
-# 7. Heartbeat — cron jobs survive compaction, do NOT re-create.
-# The recurring cron is still firing at the platform level. Re-running /o heartbeat
-# after compaction creates DUPLICATE cron jobs (the old one + a new one), which
-# compounds on every compaction until heartbeats consume the entire context window.
-# Just remind the agent the heartbeat exists — no action needed.
-echo "=== HEARTBEAT ==="
-echo "The heartbeat cron is still running (cron jobs survive compaction). Do NOT run /o heartbeat or create new cron jobs."
-echo "If you need to audit state, just check your conversation memory for recent work."
 echo ""
-
-# 8. Behavioral reminders — short, always present, keeps agents honest
-echo "=== ORCHESTRA RULES (always active) ==="
-echo "- When you make or accept a decision (tool, architecture, infra, approach): record it in .orchestra/decisions/ immediately"
-echo "- When you discover a gotcha or workaround: add it to .orchestra/MEMORY.md immediately"
-echo "- When you change behavior that's documented (API, commands, config, deploy): update the docs NOW, not later"
-echo "- When the user says 'merged/shipped/deployed' or all items are done: prompt to /o close the thread"
+echo "=== RULES ==="
+echo "- Do NOT run /o heartbeat (cron is still running)"
+echo "- Do NOT create new cron jobs"
+echo "- Read .orchestra/ files only when you need specific details"
+echo "- Record decisions, update docs, log to daily file as you work"
 echo ""
 
 exit 0

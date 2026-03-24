@@ -128,7 +128,7 @@ Skills are intelligence — the agent decides when and how to use them.
 | `/o checkpoint` | Flush all context to disk — compaction-proof snapshot |
 | `/o close` | Mark active thread as completed (shipped) or abandoned |
 | `/o reopen` | Reopen a completed or abandoned thread |
-| `/o heartbeat` | Audit state every 30 min. Auto-enabled on session start. Deduplicates cron jobs to prevent leaks. |
+| `/o heartbeat` | Audit state every 30 min. Auto-enabled on first `/o` run. Deduplicates cron jobs to prevent leaks. |
 | `/o update` | Pull latest Orchestra and sync all repos |
 
 Hooks are mechanics — deterministic, fires every time, never forgotten. `SessionStart` injects memory. `Stop` captures session boundaries. You don't invoke hooks. They just run.
@@ -229,7 +229,7 @@ Orchestra solves this with three layers, plus a context-saving delegation patter
 
 **Layer 1 — Instruction file rules (all agents).** During `setup link`, Orchestra injects trigger-action rules directly into the repo's instruction file (CLAUDE.md, AGENTS.md, .cursor/rules). These are specific: "after you commit code, update session-context.md and daily log." Works across every agent. Zero runtime cost.
 
-**Layer 2 — `/o heartbeat` with auto-schedule (Claude Code).** Fully automatic. The `SessionStart` hook tells the agent to enable heartbeat on every new session — no user action needed. Uses a lightweight inline cron prompt (not a recursive skill invocation) to check state every 30 minutes with near-zero context cost. Always deduplicates cron jobs before creating new ones to prevent compaction-triggered job leaks. The user never manages it.
+**Layer 2 — `/o heartbeat` with auto-schedule (Claude Code).** Fully automatic. Heartbeat is set up on the first `/o` dashboard invocation each session — NOT by hooks (hooks triggering heartbeat caused compaction loops). Cron scheduling happens deterministically in the main agent context (3 tool calls: list, delete all, create). The cron uses a minimal inline prompt — never `/o heartbeat` — to prevent recursive invocation. State audit file writes are delegated to background subagents to protect the main context window.
 
 **Layer 3 — Channels heartbeat (Claude Code, future).** Claude Code Channels (v2.1.80+, research preview) allow MCP servers to push events into a running session. An Orchestra Channel server could fire on git commits instead of a timer — true event-driven awareness. Blocked on Channels stabilizing (known bugs in v2.1.80-81).
 
