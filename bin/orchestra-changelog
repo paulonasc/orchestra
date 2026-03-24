@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# orchestra-changelog — show changelog entries between two versions.
+#
+# Usage:
+#   orchestra-changelog <from-version> [to-version]
+#
+# If to-version is omitted, reads from VERSION file.
+# Outputs the content of all changelog files for versions > from and <= to.
+# Exit 0 if entries found, exit 1 if none.
+set -euo pipefail
+
+ORCHESTRA_DIR="${ORCHESTRA_INSTALL_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+CHANGELOG_DIR="$ORCHESTRA_DIR/changelog"
+VERSION_FILE="$ORCHESTRA_DIR/VERSION"
+
+FROM="${1:-}"
+TO="${2:-}"
+
+if [ -z "$FROM" ]; then
+  echo "Usage: orchestra-changelog <from-version> [to-version]" >&2
+  exit 1
+fi
+
+if [ -z "$TO" ] && [ -f "$VERSION_FILE" ]; then
+  TO="$(tr -d '[:space:]' < "$VERSION_FILE")"
+fi
+
+if [ -z "$TO" ]; then
+  echo "Error: no to-version and no VERSION file found" >&2
+  exit 1
+fi
+
+if [ ! -d "$CHANGELOG_DIR" ]; then
+  exit 1
+fi
+
+# Compare semver: returns 0 if $1 > $2
+version_gt() {
+  [ "$(printf '%s\n%s' "$1" "$2" | sort -V | tail -1)" != "$2" ] && return 0 || return 1
+}
+
+# Collect matching changelog files
+found=0
+for f in "$CHANGELOG_DIR"/*.md; do
+  [ -f "$f" ] || continue
+  ver="$(basename "$f" .md)"
+
+  # Skip if version <= FROM
+  if [ "$ver" = "$FROM" ] || ! version_gt "$ver" "$FROM" 2>/dev/null; then
+    continue
+  fi
+
+  # Skip if version > TO
+  if version_gt "$ver" "$TO" 2>/dev/null; then
+    continue
+  fi
+
+  # Print this changelog entry
+  if [ "$found" -gt 0 ]; then
+    echo ""
+    echo "---"
+    echo ""
+  fi
+  cat "$f"
+  found=$((found + 1))
+done
+
+if [ "$found" -eq 0 ]; then
+  exit 1
+fi

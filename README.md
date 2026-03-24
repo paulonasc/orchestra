@@ -262,7 +262,9 @@ root: /Users/richard/Projects/pied-piper/.orchestra
 
 **Auto-sync (local):** Every `/o` invocation checks if the installed SKILL.md is stale compared to the source in the Orchestra repo. If so, it re-installs automatically — no manual `setup sync` needed. Edit Orchestra once, every linked repo picks it up on next `/o`.
 
-**Auto-update (remote):** Orchestra checks for updates on GitHub when you invoke `/o`. If a newer version exists, the agent tells you and asks if you want to update. `/o update` does a `git pull` + re-link — takes seconds, no data lost.
+**Auto-update (remote):** Orchestra checks for updates on GitHub when you invoke `/o`. If a newer version exists, the agent tells you and asks if you want to update. `/o update` does a `git pull` + re-link + shows what's new (changelog). Takes seconds, no data lost.
+
+**Changelog:** Each release has a `changelog/<version>.md` file. After update, the agent presents new features and prompts for any setup actions (like enabling heartbeat). New features are never silent.
 
 To check manually: `~/.orchestra/bin/orchestra-update-check`
 

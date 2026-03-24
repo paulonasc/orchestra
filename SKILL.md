@@ -538,14 +538,34 @@ Thread 001-instagram-integration reopened.
 
 ### `/o update` — Upgrade Orchestra
 
-First, read `.orchestra.link` to get the `.orchestra/` root path. Then run:
+**Step 1 — Save old version:**
+
+```bash
+_OLD_VER=$(cat __ORCHESTRA_DIR__/VERSION 2>/dev/null | tr -d '[:space:]')
+```
+
+**Step 2 — Pull and sync:**
 
 ```bash
 _ORCH_ROOT=$(grep "^root:" .orchestra.link 2>/dev/null | sed 's/^root: *//')
 cd __ORCHESTRA_DIR__ && git pull origin main && ./setup sync "$_ORCH_ROOT"
 ```
 
-This passes the project's `.orchestra/` path to sync so it can find the linked-repos manifest. Reports version change.
+**Step 3 — Show changelog:**
+
+```bash
+_NEW_VER=$(cat __ORCHESTRA_DIR__/VERSION 2>/dev/null | tr -d '[:space:]')
+__ORCHESTRA_DIR__/bin/orchestra-changelog "$_OLD_VER" "$_NEW_VER" 2>/dev/null
+```
+
+If the changelog script returns content, present it to the user as "What's new in Orchestra." Format the output nicely — show features, then prompt for any actions listed in the changelog.
+
+**Changelog actions** use a simple format in changelog `.md` files:
+
+- `action: relink` — run the command automatically (it's a sync/relink, safe to auto-run since `setup sync` just ran above)
+- `action: suggest` — show the prompt to the user and ask if they want to try it. Don't auto-run.
+
+If no changelog output (same version or no entries), just report: "Orchestra is up to date (v{version})."
 
 ### Post-work audit
 
