@@ -67,7 +67,7 @@ Store the resolved path. All paths below are relative to this `.orchestra/` root
 | `/o checkpoint` | `save` | Flush all context to disk — compaction-proof snapshot |
 | `/o close` | `git merge` | Mark active thread as completed (shipped) |
 | `/o reopen` | `revert` | Reopen a completed or abandoned thread |
-| `/o heartbeat` | `cron` | Audit state + auto-schedule every 10 min. `/o heartbeat stop` to cancel. |
+| `/o heartbeat` | `cron` | Audit state + auto-schedule every 30 min. `/o heartbeat stop` to cancel. |
 | `/o update` | `apt upgrade` | Pull latest Orchestra and sync all repos |
 
 ### `/o` — Executive dashboard
@@ -401,84 +401,80 @@ Checkpoint saved:
 
 ### `/o heartbeat` — Periodic state audit
 
-Lightweight check that audits whether Orchestra state is current and fixes gaps. **Fully automatic** — the user never manages this. It sets itself up on session start, renews itself before expiry, and re-enables after compaction.
+Lightweight check that audits whether Orchestra state is current and fixes gaps. **Fully automatic** — the user never manages this. It sets itself up on session start. Cron jobs survive compaction, so no re-creation is needed after compaction.
 
 **How the user experiences it:** They don't. The `SessionStart` hook tells the agent to run `/o heartbeat` on every new session. The agent does it silently. The user just sees occasional one-line status messages in their session.
 
 **Usage:**
-- `/o heartbeat` — audit now + auto-schedule recurring checks every 10 minutes
+- `/o heartbeat` — audit now + auto-schedule recurring checks every 30 minutes
 - `/o heartbeat stop` — cancel the recurring schedule (rare — only if user explicitly wants it off)
-
-**Scope:** Per-session, not per-repo. CronCreate jobs are scoped to the Claude Code session. Every new session in any linked repo auto-sets up its own heartbeat via the SessionStart hook. The user opens Claude Code anywhere, heartbeat is running within seconds.
 
 **Lifecycle:**
 
-1. **First invocation in a session** — runs the audit AND schedules recurring runs via `CronCreate` (every 10 minutes, `*/10 * * * *`). Confirm:
+1. **First invocation in a session** — runs the audit AND schedules a recurring cron (every 30 minutes). Confirm:
    ```
-   Heartbeat: updated session-context, added decision 007. Scheduled every 10 min.
-   ```
-
-2. **Subsequent runs (from cron)** — audit only, one-line output:
-   ```
-   Heartbeat: all current. ✓
-   ```
-   Or if it fixed something:
-   ```
-   Heartbeat: added decision 008, updated progress M0.12→done.
+   Heartbeat: [what changed]. Scheduled every 30 min.
    ```
 
-3. **Already scheduled (same session)** — to prevent double-scheduling within the same session, check TWO things:
-   - `state/session-context.md` has `heartbeat_scheduled: true`
-   - AND `heartbeat_created_at` is within the last few hours (not stale from a prior session)
-   If both conditions are true, skip scheduling and just audit. If `heartbeat_created_at` is missing or older than 12 hours, the flag is stale — re-create the cron job.
+2. **Subsequent runs (manual `/o heartbeat`)** — audit only, one-line output:
+   ```
+   Heartbeat: all current.
+   ```
 
-   **IMPORTANT:** CronCreate jobs are session-scoped. They die when the session ends. The `heartbeat_scheduled: true` flag in session-context persists across sessions but the cron does not. On session start, always create a fresh cron regardless of what the file says. The SessionStart hook handles this by always instructing `/o heartbeat`.
+3. **Cron-triggered runs** — the cron uses an **inline audit prompt** (NOT `/o heartbeat`). This is critical: the cron must NEVER re-invoke the `/o heartbeat` skill, or it creates recursive scheduling. The cron prompt is a minimal, self-contained instruction that does NOT read files, does NOT create cron jobs, and does NOT invoke any skills. See "Scheduling implementation" below.
 
-4. **Self-renewal** — CronCreate jobs expire after 3 days (platform limit). On every heartbeat run, check `heartbeat_created_at` in session-context. If the job is older than **2 days 20 hours** (leaving a 4-hour buffer):
-   - Cancel the old job via `CronDelete`
-   - Create a new one via `CronCreate`
-   - Update `heartbeat_job_id` and `heartbeat_created_at` in session-context
-   - Report silently (no user-facing expiry message)
-   The user never sees an expiration. The heartbeat silently keeps itself alive.
-
-5. **Post-compaction** — the `PostCompact` hook always tells the agent to re-enable heartbeat (CronCreate state doesn't survive compaction). This is automatic.
-
-6. **`/o heartbeat stop`** — cancel via `CronDelete` using the stored job ID. Remove `heartbeat_scheduled`, `heartbeat_job_id`, and `heartbeat_created_at` from session-context. Confirm: `Heartbeat schedule cancelled.`
+4. **`/o heartbeat stop`** — cancel via `CronDelete` using the stored job ID. Remove `heartbeat_scheduled`, `heartbeat_job_id`, and `heartbeat_created_at` from session-context. Confirm: `Heartbeat schedule cancelled.`
 
 **Scheduling implementation:**
 
-On first run (or session start), use the `CronCreate` tool:
+**CRITICAL: Always deduplicate before creating.** Cron jobs survive compaction at the platform level even though the agent's memory of them is lost. Before creating ANY new cron job:
+
+1. Call `CronList` to see all existing cron jobs
+2. Call `CronDelete` on EVERY existing job (heartbeat or otherwise — there should be no other Orchestra crons)
+3. Only THEN create the new one
+
 ```
-CronCreate(cron: "*/10 * * * *", prompt: "/o heartbeat", recurring: true)
+CronCreate(cron: "*/30 * * * *", prompt: "Quick mental check — did I make commits, decisions, or progress since my last check? If yes, update .orchestra/state/session-context.md briefly. If no, do nothing and output nothing. IMPORTANT: Do NOT run /o heartbeat. Do NOT create cron jobs. Do NOT read files unless you have something to write. Maximum 1 tool call.", recurring: true)
 ```
+
+**The cron prompt is NOT `/o heartbeat`.** It is a minimal inline instruction. This prevents:
+- Recursive cron creation (heartbeat creating more heartbeats)
+- Full skill invocation overhead (preamble, file reads, scheduling checks)
+- Context window bloat from repeated skill machinery
 
 Store in `state/session-context.md`:
 - `heartbeat_scheduled: true`
 - `heartbeat_job_id: <id>`
 - `heartbeat_created_at: <ISO 8601 timestamp>`
 
-On self-renewal, delete old job, create new one, update all three fields.
-
 On `/o heartbeat stop`, use `CronDelete` with the stored job ID. Remove all three fields.
 
-**The audit (fast — under 30 seconds):**
+**The audit (context-budget conscious):**
 
-1. **Unrecorded decisions** — scan recent git commits (`git log --since="30 minutes ago"`) for keywords suggesting decisions (config changes, new dependencies, infrastructure changes). If found and no matching `decisions/` file exists, create one.
+**CRITICAL: Minimize context usage.** Every tool call, file read, and output line consumes context window. The heartbeat must be the cheapest possible operation — it runs repeatedly and must not crowd out actual work.
 
-2. **Session-context freshness** — read `state/session-context.md`. If `## Current state` doesn't reflect what you've been doing (stale), update it.
+**Step 0 — Quick mental check (NO tool calls).** Before reading any files or running any commands, reflect on what you've done since the last heartbeat using only your conversation memory:
+- Did you make any commits? Any decisions? Any significant progress?
+- If the answer is "no, I've been doing normal coding work" → output `Heartbeat: all current. ✓` and **stop**. No file reads, no git log, no tool calls. This is the fast path and should be the common case.
 
-3. **Daily log gaps** — read `memory/YYYY-MM-DD.md`. If significant work happened since the last entry, add an entry.
+**Step 1 — Only if you did something noteworthy**, run the audit:
 
-4. **Progress drift** — if the active thread's `progress.yaml` has items that should be `done` based on what you've built, update them.
+1. **Unrecorded decisions** — `git log --since="30 minutes ago" --oneline` (one command). If nothing, skip.
 
-5. **Doc staleness** — quick scan: did you change any API, config, or command since last heartbeat? If the relevant doc (README, CLAUDE.md) doesn't mention the change, flag it or fix it inline.
+2. **Session-context freshness** — update `state/session-context.md` only if your working state actually changed.
+
+3. **Daily log gaps** — append to `memory/YYYY-MM-DD.md` only if significant work happened.
+
+4. **Progress drift** — update `progress.yaml` only if items should be marked done.
+
+5. **Doc staleness** — flag only if you changed an API, config, or command.
 
 **Rules:**
+- **The no-op case must use ZERO tool calls.** Just output the one-line "all current" message. This is critical for context budget.
 - Keep it fast. Don't run full test suites or deep audits — that's `/o docs` and `/o checkpoint`.
 - Don't ask the user questions. Fix what you can silently, report what you did.
-- From cron, the output appears in the session automatically. The user sees it and can correct if needed.
 - This is the "git status" of Orchestra — quick, informational, occasionally catches drift.
-- Don't mention expiry to the user. Self-renewal is silent. The only user-facing message about scheduling is on first setup: "Scheduled every 10 min."
+- The only user-facing message about scheduling is on first setup: "Scheduled every 30 min."
 
 ### `/o close` — Mark thread as completed
 
@@ -583,7 +579,7 @@ If no changelog output (same version or no entries), just report: "Orchestra is 
 
 **Step 4 — Enable heartbeat (automatic):**
 
-After update completes, check if heartbeat is scheduled (look for `heartbeat_scheduled: true` in `state/session-context.md`). If not, run `/o heartbeat` automatically. Don't ask the user — just do it. This ensures every updated session has automatic state checks.
+After update completes, check if heartbeat is scheduled (look for `heartbeat_scheduled: true` in `state/session-context.md`). If not, run `/o heartbeat` automatically. Don't ask the user — just do it. This ensures every updated session has automatic state checks. **Remember:** always call `CronList` + `CronDelete` on existing jobs before creating a new one.
 
 ### Post-work audit
 
@@ -1159,14 +1155,11 @@ These rules are always in the agent's system prompt. They survive compaction. Th
 
 ### Layer 2 — `/o heartbeat` with auto-schedule (Claude Code)
 
-Run `/o heartbeat` once — it audits state AND auto-schedules itself to recur every 10 minutes via `CronCreate`. No manual `/loop` commands needed.
+Run `/o heartbeat` once — it audits state AND auto-schedules a lightweight cron to recur every 30 minutes. No manual `/loop` commands needed.
 
-Every 10 minutes, the agent:
-1. Checks for unrecorded decisions in recent git history
-2. Updates session-context if stale
-3. Adds missing daily log entries
-4. Updates progress.yaml if items should be marked done
-5. Quick-checks docs for staleness
+The cron uses an **inline audit prompt** (NOT `/o heartbeat`) to avoid recursive scheduling and context bloat. Every 30 minutes, the agent silently checks if it made progress and updates session-context if needed — zero tool calls on the fast path.
+
+**Deduplication is mandatory:** before creating any cron, call `CronList` + `CronDelete` on all existing jobs. Cron jobs survive compaction but the agent's memory of them doesn't — without dedup, every compaction adds another concurrent heartbeat until the context window is consumed.
 
 The `/o` dashboard proactively suggests heartbeat when it detects stale state. One command, auto-recurring, self-managing.
 

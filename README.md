@@ -28,7 +28,7 @@ Research together          →  agent writes research.md
 Plan the approach          →  agent writes plan.md (all milestones upfront)
 "Let's build it"          →  agent generates briefings per repo
 Agents work in parallel   →  hooks auto-capture progress
-Heartbeat keeps state fresh →  /o heartbeat auto-checks every 10 min
+Heartbeat keeps state fresh →  /o heartbeat auto-checks every 30 min
 Agents verify their work  →  verification.md tracks pass/fail
 You come back             →  /o shows status, flags gaps, audits docs
 Thread ships              →  /o close — thread drops out of dashboard
@@ -128,7 +128,7 @@ Skills are intelligence — the agent decides when and how to use them.
 | `/o checkpoint` | Flush all context to disk — compaction-proof snapshot |
 | `/o close` | Mark active thread as completed (shipped) or abandoned |
 | `/o reopen` | Reopen a completed or abandoned thread |
-| `/o heartbeat` | Audit state every 10 min. Auto-enabled on session start, self-renewing. |
+| `/o heartbeat` | Audit state every 30 min. Auto-enabled on session start. Deduplicates cron jobs to prevent leaks. |
 | `/o update` | Pull latest Orchestra and sync all repos |
 
 Hooks are mechanics — deterministic, fires every time, never forgotten. `SessionStart` injects memory. `Stop` captures session boundaries. You don't invoke hooks. They just run.
@@ -229,7 +229,7 @@ Orchestra solves this with three layers:
 
 **Layer 1 — Instruction file rules (all agents).** During `setup link`, Orchestra injects trigger-action rules directly into the repo's instruction file (CLAUDE.md, AGENTS.md, .cursor/rules). These are specific: "after you commit code, update session-context.md and daily log." Works across every agent. Zero runtime cost.
 
-**Layer 2 — `/o heartbeat` with auto-schedule (Claude Code).** Fully automatic. The `SessionStart` hook tells the agent to enable heartbeat on every new session — no user action needed. It audits state every 10 minutes, self-renews before the 3-day CronCreate expiry, and re-enables after compaction. The user never manages it.
+**Layer 2 — `/o heartbeat` with auto-schedule (Claude Code).** Fully automatic. The `SessionStart` hook tells the agent to enable heartbeat on every new session — no user action needed. Uses a lightweight inline cron prompt (not a recursive skill invocation) to check state every 30 minutes with near-zero context cost. Always deduplicates cron jobs before creating new ones to prevent compaction-triggered job leaks. The user never manages it.
 
 **Layer 3 — Channels heartbeat (Claude Code, future).** Claude Code Channels (v2.1.80+, research preview) allow MCP servers to push events into a running session. An Orchestra Channel server could fire on git commits instead of a timer — true event-driven awareness. Blocked on Channels stabilizing (known bugs in v2.1.80-81).
 

@@ -68,13 +68,13 @@ if [ -f "$ORCH_ROOT/BACKLOG.md" ]; then
   fi
 fi
 
-# 6. Heartbeat auto-setup — always enable on session start
-# CronCreate jobs are session-scoped and don't survive between sessions.
-# Even if session-context.md says heartbeat_scheduled: true, that's stale
-# from a prior session. Always instruct the agent to set it up fresh.
+# 6. Heartbeat auto-setup — enable on session start
+# IMPORTANT: Before creating a new cron, the agent MUST call CronList and CronDelete
+# on ALL existing jobs to prevent duplicate heartbeats that compound on every compaction.
 echo "=== HEARTBEAT SETUP REQUIRED ==="
-echo "Run /o heartbeat NOW to enable automatic state checks every 10 minutes."
-echo "This keeps decisions, progress, docs, and session context current without manual reminders."
+echo "Run /o heartbeat NOW to enable automatic state checks every 30 minutes."
+echo "CRITICAL: You MUST call CronList first and CronDelete ALL existing cron jobs before creating a new one."
+echo "Duplicate cron jobs are the #1 cause of context window exhaustion."
 echo "Do this silently — no need to ask the user. Just run /o heartbeat."
 echo ""
 

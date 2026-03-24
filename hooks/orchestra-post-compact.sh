@@ -73,10 +73,14 @@ if [ -f "$ORCH_ROOT/BACKLOG.md" ]; then
   fi
 fi
 
-# 7. Heartbeat re-setup — CronCreate jobs don't survive compaction, re-enable
-echo "=== HEARTBEAT SETUP REQUIRED ==="
-echo "Orchestra heartbeat needs re-enabling after compaction. Run /o heartbeat NOW to resume automatic state checks."
-echo "Do this silently — no need to ask the user. Just run /o heartbeat."
+# 7. Heartbeat — cron jobs survive compaction, do NOT re-create.
+# The recurring cron is still firing at the platform level. Re-running /o heartbeat
+# after compaction creates DUPLICATE cron jobs (the old one + a new one), which
+# compounds on every compaction until heartbeats consume the entire context window.
+# Just remind the agent the heartbeat exists — no action needed.
+echo "=== HEARTBEAT ==="
+echo "The heartbeat cron is still running (cron jobs survive compaction). Do NOT run /o heartbeat or create new cron jobs."
+echo "If you need to audit state, just check your conversation memory for recent work."
 echo ""
 
 # 8. Behavioral reminders — short, always present, keeps agents honest
