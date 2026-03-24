@@ -154,6 +154,15 @@ Long sessions get compacted by Claude Code — the conversation is summarized an
 
 No manual intervention. No "write this down before it compacts." The context is already on disk because the agent keeps it current. For an explicit full save, `/o checkpoint` flushes everything — session context, progress, verification, daily log, memory — in one shot.
 
+### Concurrent sessions
+
+Orchestra supports multiple agents working on the same repo simultaneously. Each session gets its own context file at `state/sessions/{session-id}.md` instead of sharing a single `session-context.md` that would get stomped.
+
+- Session start generates a unique session ID and creates a per-session file
+- Concurrent sessions are auto-detected — you get a warning when another session is active
+- Session cleanup happens on exit (PID-matched) and stale sessions (>24h) are auto-pruned
+- Backwards compatible: `state/session-context.md` is still written as a copy for hooks that read it
+
 ### Threads
 
 A thread is any unit of work — a feature, a bug, a spike, an investigation. It lives in `threads/<name>/` and follows a lifecycle: **chat → research → plan → execute & iterate → close**.

@@ -48,7 +48,7 @@ Context from the main agent (what happened this session):
 - <bullet list of what was done, decisions made, current state, blockers>
 
 Update ALL of these files:
-1. state/session-context.md — <what to write>
+1. state/sessions/{session-id}.md — <what to write> (also copy to state/session-context.md)
 2. threads/<thread>/progress.yaml — <which items changed status>
 3. threads/<thread>/conversation.md — <append what was discussed/decided>
 4. threads/<thread>/verification.md — <append test results if any>
@@ -123,6 +123,17 @@ Store the resolved path. All paths below are relative to this `.orchestra/` root
 Read all Orchestra state files and render a **top-down** dashboard. Start high-level, then drill down. The user should understand the project in 5 seconds from the top section alone.
 
 **Before rendering:** If heartbeat is not yet scheduled this session (check `state/session-context.md` for `heartbeat_scheduled: true` — but remember this flag may be stale from a prior session), run `/o heartbeat` silently first. This is the ONLY place that triggers heartbeat setup — hooks do NOT trigger it.
+
+**Concurrent sessions check:** Before rendering, check `state/sessions/` for multiple active session files. If multiple files exist, add an "Active sessions" section after Section 0:
+
+```
+## Active sessions (2)
+
+20260324-143022-12345  Working on: 001-honestclaw-mvp — API scaffold
+20260324-144510-67890  Working on: 003-compress-pipeline — ffmpeg config
+```
+
+Show each session's ID and the first line of "Working on" from its file. If only one session file (or none), skip this section entirely.
 
 **Section 0 — Thread health (one line)**
 
@@ -234,7 +245,7 @@ or just ask about any milestone
 
 **Rules:**
 - Only show ONE hint — never a list. The user should read it in 1 second.
-- Rotate hints across invocations. Don't show the same hint twice in a row within a session. Track the last hint shown in `state/session-context.md`.
+- Rotate hints across invocations. Don't show the same hint twice in a row within a session. Track the last hint shown in `state/sessions/{session-id}.md` (and `state/session-context.md`).
 - Keep hints under 80 characters.
 - The `or just ask about any milestone` line in the nav is critical — it tells users they can use natural language.
 
@@ -424,7 +435,7 @@ Scans all documentation in the repo (and linked repos) against recent changes. F
 - Don't rewrite docs from scratch — make targeted updates to stale sections
 - Preserve the doc's existing style and voice
 - If a doc references code, verify the references are still valid (file paths, function names, CLI commands)
-- Track the last audit date in `state/session-context.md` so subsequent runs only check new changes
+- Track the last audit date in `state/sessions/{session-id}.md` (and `state/session-context.md`) so subsequent runs only check new changes
 
 ### `/o checkpoint` — Save everything to disk
 
@@ -434,7 +445,7 @@ Force-flush all in-flight context to Orchestra files. Use before stepping away, 
 
 **What the subagent must write:**
 
-1. **`state/session-context.md`** — full snapshot of current state: what you're working on, key context, decisions made, current progress, next steps
+1. **`state/sessions/{session-id}.md`** — full snapshot of current state: what you're working on, key context, decisions made, current progress, next steps. Also copy to **`state/session-context.md`** for backwards compat.
 2. **`threads/NNN-slug/progress.yaml`** — ensure all item statuses reflect reality right now
 3. **`verification.md`** — record any test results from this session not yet captured
 4. **`conversation.md`** — append any design decisions or important discussion from this session
@@ -479,14 +490,14 @@ CronDelete(<each job id>)
 # 3. Create new cron with INLINE prompt (NEVER "/o heartbeat")
 CronCreate(
   cron: "*/30 * * * *",
-  prompt: "Quick mental check: did I make commits, decisions, or progress since my last check? If yes, update .orchestra/state/session-context.md briefly. If no, do nothing and say nothing. Do NOT run /o heartbeat. Do NOT create cron jobs. Do NOT read files unless you need to write. Maximum 1 tool call.",
+  prompt: "Quick mental check: did I make commits, decisions, or progress since my last check? If yes, update .orchestra/state/sessions/{session-id}.md briefly (also copy to .orchestra/state/session-context.md for compat). If no, do nothing and say nothing. Do NOT run /o heartbeat. Do NOT create cron jobs. Do NOT read files unless you need to write. Maximum 1 tool call.",
   recurring: true
 )
 ```
 
 **CRITICAL: The cron prompt must NEVER be `/o heartbeat` or invoke any skill.** It is a minimal inline instruction. If the cron invokes the skill, it creates a recursive scheduling bomb that consumes the entire context window.
 
-Store in `state/session-context.md`: `heartbeat_scheduled: true`, `heartbeat_job_id: <id>`, `heartbeat_created_at: <ISO timestamp>`
+Store in `state/sessions/{session-id}.md` (and copy to `state/session-context.md`): `heartbeat_scheduled: true`, `heartbeat_job_id: <id>`, `heartbeat_created_at: <ISO timestamp>`
 
 **Step 3 — State audit (subagent, only if noteworthy work happened):**
 
@@ -501,7 +512,7 @@ What happened since last heartbeat:
 <bullet list: commits, decisions, progress, blockers, current state>
 
 Update ONLY files that need changes:
-- state/session-context.md — current working state
+- state/sessions/{session-id}.md — current working state (also copy to state/session-context.md)
 - memory/YYYY-MM-DD.md — append daily log entry
 - threads/<thread>/progress.yaml — mark items done if applicable
 
@@ -569,7 +580,7 @@ If the user says yes, run the `/o close` flow. If no, drop it — don't ask agai
 
 **Rules:**
 - Only prompt for the **active thread**. Don't prompt about threads the user isn't currently working on.
-- Only prompt **once per session** per thread. Track in `state/session-context.md` if you already asked.
+- Only prompt **once per session** per thread. Track in `state/sessions/{session-id}.md` (and `state/session-context.md`) if you already asked.
 - If verification has FAILs or PENDINGs, include that in the prompt: *"2 verification items are still pending — close anyway?"*
 - If the user merged a PR but there's still work on the thread (e.g., multi-PR thread), don't prompt — a single PR merge doesn't mean the thread is done.
 
@@ -665,6 +676,7 @@ Do not wait until the end of the session. Write to MEMORY.md as you go. If you f
 
 - Append timestamped entries when you complete meaningful work
 - Format: `## HH:MM — Agent (worktree) — what you did`
+- When appending to `conversation.md` or daily logs, prefix the block with `[session: {session-id}]` — this makes interleaved entries from concurrent sessions distinguishable
 - NEVER edit daily logs from previous days. Append-only.
 - Hooks auto-capture session boundaries. You write the substance.
 
@@ -722,7 +734,7 @@ Update these files:
 
 1. **`verification.md`** — record the result with `**Tested by:** user (manual)`, the command they ran, and the output they shared
 2. **`threads/NNN-slug/progress.yaml`** — if their action completes or unblocks a milestone item, update its status
-3. **`state/session-context.md`** — reflect the new current state
+3. **`state/sessions/{session-id}.md`** — reflect the new current state (also copy to `state/session-context.md`)
 4. **`memory/YYYY-MM-DD.md`** — log what the user did with a timestamp
 
 Examples of user-reported progress:
@@ -1050,9 +1062,15 @@ If milestones don't have a `thread` field, ask the user which thread they belong
 
 ## Session context (compaction survival)
 
-`state/session-context.md` is a volatile scratchpad that preserves your working context across compaction. **YOU MUST keep this file current throughout the session** — not at the end, not before compaction, but continuously as you work.
+Session context is now **per-session**. Each session gets its own file at `state/sessions/{session-id}.md` (format: `YYYYMMDD-HHMMSS-PID`). The session ID is provided by the session-start hook — store it and use it for all writes.
 
-**Update `state/session-context.md` after every significant action:** completing a task, making a decision, discovering something important, changing direction. This takes seconds and saves everything if compaction hits.
+`state/session-context.md` still exists for backwards compatibility — it is always a copy of the most recently written session context. **Write to both files:** primary is `state/sessions/{session-id}.md`, then copy the same content to `state/session-context.md`.
+
+**YOU MUST keep your session file current throughout the session** — not at the end, not before compaction, but continuously as you work.
+
+**Update your session file after every significant action:** completing a task, making a decision, discovering something important, changing direction. This takes seconds and saves everything if compaction hits.
+
+If you see a **CONCURRENT SESSIONS** warning at session start, be aware other agents are active. Your session file is isolated — no collision.
 
 ### Format
 
@@ -1079,7 +1097,8 @@ If milestones don't have a `thread` field, ask the user which thread they belong
 
 ### Rules
 
-- **Overwrite the entire file each time** — this is not a log, it's a snapshot of right now
+- **Overwrite YOUR session file each time** — this is not a log, it's a snapshot of right now
+- Also overwrite `state/session-context.md` with the same content (backwards compat copy)
 - Keep it under 50 lines — just enough to resume without loss
 - The PostCompact hook re-injects this file automatically after compaction
 - When the session ends, this file becomes stale — the session log and daily log are the durable records
@@ -1092,7 +1111,7 @@ If milestones don't have a `thread` field, ask the user which thread they belong
 - You discovered a gotcha or blocker
 - You're about to spawn subagents or do parallel work
 
-If compaction happens and `state/session-context.md` is empty or stale, you will lose context. Keep it current.
+If compaction happens and your session file is empty or stale, you will lose context. Keep it current.
 
 ## Sessions
 

@@ -12,6 +12,38 @@ source "$SCRIPT_DIR/lib.sh"
 
 ORCH_ROOT="$(find_orchestra_root)" || exit 0
 
+# Generate session ID and set up session file
+SESSION_ID="$(generate_session_id)"
+mkdir -p "$ORCH_ROOT/state/sessions"
+cleanup_stale_sessions "$ORCH_ROOT"
+
+# Detect concurrent sessions
+OTHER_SESSIONS=""
+while IFS= read -r sid; do
+  [ -z "$sid" ] && continue
+  [ "$sid" = "$SESSION_ID" ] && continue
+  OTHER_SESSIONS="${OTHER_SESSIONS}  - ${sid}\n"
+done <<< "$(list_active_sessions "$ORCH_ROOT")"
+
+if [ -n "$OTHER_SESSIONS" ]; then
+  echo "=== CONCURRENT SESSIONS ==="
+  echo "Other active sessions detected:"
+  printf "$OTHER_SESSIONS"
+  echo "Your session: $SESSION_ID"
+  echo "Each session has its own context file in state/sessions/"
+  echo ""
+fi
+
+# Create session-scoped context file
+cat > "$ORCH_ROOT/state/sessions/${SESSION_ID}.md" << SESSEOF
+# Session $SESSION_ID
+Started: $(date '+%Y-%m-%d %H:%M:%S')
+PID: $$
+SESSEOF
+
+# Also write session-context.md for backwards compat (post-compact, heartbeat)
+cp "$ORCH_ROOT/state/sessions/${SESSION_ID}.md" "$ORCH_ROOT/state/session-context.md" 2>/dev/null || true
+
 TODAY="$(date +%Y-%m-%d)"
 YESTERDAY="$(date -v-1d +%Y-%m-%d 2>/dev/null || date -d 'yesterday' +%Y-%m-%d 2>/dev/null)"
 
@@ -67,6 +99,7 @@ fi
 
 # 5. Behavioral reminders — short, always present
 echo "=== ORCHESTRA RULES (always active) ==="
+echo "- Your session ID: $SESSION_ID (context file: state/sessions/${SESSION_ID}.md)"
 echo "- BEFORE coding: save your research/plan to .orchestra/ thread files first. No code before the plan is written."
 echo "- AFTER researching: write findings to conversation.md + update session-context.md. Research that isn't saved dies at compaction."
 echo "- When you make or accept a decision (tool, architecture, infra, approach): record it in .orchestra/decisions/ immediately"

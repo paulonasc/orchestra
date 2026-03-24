@@ -66,7 +66,7 @@ cmd_init() {
   echo ""
 
   # Create directory structure
-  mkdir -p "$orch_dir"/{memory,state,decisions,threads,briefings,sessions,handoffs,templates,inject,.logs}
+  mkdir -p "$orch_dir"/{memory,state,state/sessions,decisions,threads,briefings,sessions,handoffs,templates,inject,.logs}
 
   # MEMORY.md
   if [ ! -f "$orch_dir/MEMORY.md" ]; then

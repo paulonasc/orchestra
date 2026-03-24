@@ -33,6 +33,31 @@ get_active_thread() {
   fi
 }
 
+# Generate a unique session ID: YYYYMMDD-HHMMSS-PID
+generate_session_id() {
+  echo "$(date +%Y%m%d-%H%M%S)-$$"
+}
+
+# List active session IDs from state/sessions/
+list_active_sessions() {
+  local orch_root="$1"
+  local sessions_dir="$orch_root/state/sessions"
+  if [ -d "$sessions_dir" ]; then
+    for f in "$sessions_dir"/*.md; do
+      [ -f "$f" ] || continue
+      basename "$f" .md
+    done
+  fi
+}
+
+# Remove session files older than 24 hours
+cleanup_stale_sessions() {
+  local orch_root="$1"
+  local sessions_dir="$orch_root/state/sessions"
+  [ -d "$sessions_dir" ] || return 0
+  find "$sessions_dir" -name "*.md" -mmin +1440 -delete 2>/dev/null || true
+}
+
 ensure_daily_log() {
   local orch_root="$1"
   local today="$2"

@@ -27,4 +27,11 @@ WORKTREE_NAME="$(basename "$(pwd)")"
 echo "" >> "$ORCH_ROOT/memory/$TODAY.md"
 echo "## $TIME — Session ended ($WORKTREE_NAME)" >> "$ORCH_ROOT/memory/$TODAY.md"
 
+# Clean up session file for this process (match by PID suffix)
+if [ -d "$ORCH_ROOT/state/sessions" ]; then
+  for f in "$ORCH_ROOT/state/sessions"/*-$$.md "$ORCH_ROOT/state/sessions"/*-$PPID.md; do
+    [ -f "$f" ] && rm -f "$f"
+  done
+fi
+
 exit 0
