@@ -29,6 +29,54 @@ If no output, everything is current — continue silently.
 
 You are an AI agent using Orchestra — a file-based coordination system. You read from and write to `.orchestra/`. Hooks handle lifecycle capture automatically (session start/stop, daily logs). You handle the intelligence: creating threads, writing memory, generating briefings, recording decisions.
 
+## Context budget — delegate heavy writes to subagents
+
+Orchestra state updates (checkpoint, docs audit, daily logs, MEMORY.md, progress.yaml, conversation.md, verification.md) are expensive: they read multiple files, write multiple files, and generate verbose output — all of which consumes the main context window. Over a session, this overhead compounds and accelerates compaction.
+
+**Rule: When an Orchestra operation needs to read/write 3+ files, delegate it to a background subagent via the Agent tool.**
+
+The subagent gets a focused prompt, does all the file I/O in its own context, and returns a one-line summary. The main context only sees the summary — not the file contents, not the diffs, not the intermediate reads.
+
+**Pattern:**
+
+```
+Agent(
+  description: "Orchestra checkpoint",
+  prompt: "You are updating Orchestra state files. The .orchestra/ root is at <ORCH_ROOT>.
+
+Context from the main agent (what happened this session):
+- <bullet list of what was done, decisions made, current state, blockers>
+
+Update ALL of these files:
+1. state/session-context.md — <what to write>
+2. threads/<thread>/progress.yaml — <which items changed status>
+3. threads/<thread>/conversation.md — <append what was discussed/decided>
+4. threads/<thread>/verification.md — <append test results if any>
+5. memory/YYYY-MM-DD.md — <append daily log entries>
+6. MEMORY.md — <add durable learnings if any>
+
+After writing, output a single summary line listing what you updated.",
+  run_in_background: true,
+  mode: "bypassPermissions"
+)
+```
+
+**What to pass to the subagent:** The main agent must include all relevant context in the prompt — what was done, what decisions were made, what the current state is. The subagent has no conversation memory. Give it everything it needs to write accurate files without guessing.
+
+**Where results are logged:** The subagent writes directly to `.orchestra/` files. Those files ARE the log. When the subagent returns, its one-line summary appears in the main context. If the main agent needs to verify, it can read the files later — but usually the summary is enough.
+
+**When to use this:**
+- `/o checkpoint` — always (it writes 6+ files)
+- `/o docs` — always (it reads all docs + git log + writes updates)
+- Heartbeat audit when it has work to do (writes 2+ files) — but NOT on the no-op fast path
+- Post-work audit — always
+- Any time you need to update daily log + session-context + progress together
+
+**When NOT to use this:**
+- Single-file writes (recording one decision, one MEMORY.md entry) — just do it inline
+- The heartbeat no-op fast path (zero tool calls, one-line output)
+- When the user is actively watching and expects interactive feedback on what was written
+
 ## Finding the Orchestra root
 
 Resolve the `.orchestra/` path using this fallback chain:
@@ -336,6 +384,8 @@ Imported plan.md → threads/003-payment-integration/
 
 Scans all documentation in the repo (and linked repos) against recent changes. Finds what's stale and offers to fix it.
 
+**IMPORTANT: Delegate to a subagent.** Doc audits read every doc file + git log + cross-reference — extremely context-heavy. Spawn an Agent with the task, let it do the reads/writes, get back a summary of what's stale and what it fixed. Only bring results back to the main context if the user needs to approve changes.
+
 **Flow:**
 
 1. **Discover docs** — find all documentation files in the repo:
@@ -378,7 +428,9 @@ Scans all documentation in the repo (and linked repos) against recent changes. F
 
 Force-flush all in-flight context to Orchestra files. Use before stepping away, before a long operation, or whenever you want a compaction-proof snapshot.
 
-**Write ALL of these:**
+**IMPORTANT: Delegate to a subagent.** Checkpoint writes 6+ files — doing this inline consumes significant context. Follow the "Context budget" pattern above: spawn a background Agent with all the context it needs, let it do the writes, get back a one-line summary.
+
+**What the subagent must write:**
 
 1. **`state/session-context.md`** — full snapshot of current state: what you're working on, key context, decisions made, current progress, next steps
 2. **`threads/NNN-slug/progress.yaml`** — ensure all item statuses reflect reality right now
@@ -387,14 +439,12 @@ Force-flush all in-flight context to Orchestra files. Use before stepping away, 
 5. **`memory/YYYY-MM-DD.md`** — log what was accomplished so far today
 6. **`MEMORY.md`** — if you learned anything durable this session (patterns, gotchas, preferences), write it now
 
-After writing, confirm:
+**What you pass in the subagent prompt:** Summarize everything from your conversation memory — what was built, what decisions were made, what's blocked, what tests passed/failed, what the user said. The subagent has no conversation context; your prompt IS its context. Be thorough here — this is what survives compaction.
+
+After the subagent returns, confirm to the user:
 ```
-Checkpoint saved:
-  ✓ session-context.md — working on M0.11, terraform plan passed, Route53 blocker
-  ✓ progress.yaml — M0.8 done, M0.11 blocked (thread 001)
-  ✓ verification.md — 2 new results recorded
-  ✓ daily log — 3 entries added
-  ✓ MEMORY.md — added AWS region preference
+Checkpoint saved (via subagent):
+  ✓ session-context, progress, daily log, conversation log updated
 ```
 
 **This is the "save game" button.** Everything needed to resume from scratch is now on disk. If compaction happens or the session ends, nothing is lost.
@@ -403,78 +453,63 @@ Checkpoint saved:
 
 Lightweight check that audits whether Orchestra state is current and fixes gaps. **Fully automatic** — the user never manages this. It sets itself up on session start. Cron jobs survive compaction, so no re-creation is needed after compaction.
 
-**How the user experiences it:** They don't. The `SessionStart` hook tells the agent to run `/o heartbeat` on every new session. The agent does it silently. The user just sees occasional one-line status messages in their session.
+**How the user experiences it:** They don't. The `SessionStart` hook tells the agent to run `/o heartbeat` on every new session. The agent does it silently. The main context window only ever sees a one-line result.
 
 **Usage:**
 - `/o heartbeat` — audit now + auto-schedule recurring checks every 30 minutes
-- `/o heartbeat stop` — cancel the recurring schedule (rare — only if user explicitly wants it off)
+- `/o heartbeat stop` — cancel the recurring schedule
 
-**Lifecycle:**
+**The entire heartbeat runs in a subagent.** The main agent is just a thin wrapper:
 
-1. **First invocation in a session** — runs the audit AND schedules a recurring cron (every 30 minutes). Confirm:
-   ```
-   Heartbeat: [what changed]. Scheduled every 30 min.
-   ```
-
-2. **Subsequent runs (manual `/o heartbeat`)** — audit only, one-line output:
-   ```
-   Heartbeat: all current.
-   ```
-
-3. **Cron-triggered runs** — the cron uses an **inline audit prompt** (NOT `/o heartbeat`). This is critical: the cron must NEVER re-invoke the `/o heartbeat` skill, or it creates recursive scheduling. The cron prompt is a minimal, self-contained instruction that does NOT read files, does NOT create cron jobs, and does NOT invoke any skills. See "Scheduling implementation" below.
-
-4. **`/o heartbeat stop`** — cancel via `CronDelete` using the stored job ID. Remove `heartbeat_scheduled`, `heartbeat_job_id`, and `heartbeat_created_at` from session-context. Confirm: `Heartbeat schedule cancelled.`
-
-**Scheduling implementation:**
-
-**CRITICAL: Always deduplicate before creating.** Cron jobs survive compaction at the platform level even though the agent's memory of them is lost. Before creating ANY new cron job:
-
-1. Call `CronList` to see all existing cron jobs
-2. Call `CronDelete` on EVERY existing job (heartbeat or otherwise — there should be no other Orchestra crons)
-3. Only THEN create the new one
+1. Quick mental check (NO tool calls): did I do anything noteworthy since the last heartbeat?
+2. If no → output `Heartbeat: all current.` and **stop**. Zero tool calls. Done.
+3. If yes → spawn a background subagent with ALL the work:
 
 ```
-CronCreate(cron: "*/30 * * * *", prompt: "Quick mental check — did I make commits, decisions, or progress since my last check? If yes, update .orchestra/state/session-context.md briefly. If no, do nothing and output nothing. IMPORTANT: Do NOT run /o heartbeat. Do NOT create cron jobs. Do NOT read files unless you have something to write. Maximum 1 tool call.", recurring: true)
+Agent(
+  description: "Orchestra heartbeat",
+  prompt: "You are running an Orchestra heartbeat. The .orchestra/ root is at <ORCH_ROOT>.
+The active thread is <THREAD_NAME>.
+
+CONTEXT FROM MAIN AGENT (what happened since last heartbeat):
+<bullet list: commits made, decisions taken, progress, blockers, current state>
+
+YOUR TASKS:
+
+1. SCHEDULING (first invocation only):
+   - Call CronList. Call CronDelete on ALL existing cron jobs (prevents duplicates).
+   - Then: CronCreate(cron: '*/30 * * * *', prompt: 'Quick mental check — did I make commits, decisions, or progress since my last check? If yes, update .orchestra/state/session-context.md briefly. If no, do nothing and output nothing. Do NOT run /o heartbeat. Do NOT create cron jobs. Do NOT read files unless you have something to write. Maximum 1 tool call.', recurring: true)
+   - Update state/session-context.md with heartbeat_scheduled: true, heartbeat_job_id: <id>, heartbeat_created_at: <ISO timestamp>
+   - SKIP this step if the main agent tells you heartbeat is already scheduled.
+
+2. STATE AUDIT:
+   - Update state/session-context.md if working state changed
+   - Append to memory/YYYY-MM-DD.md if significant work happened
+   - Update threads/<thread>/progress.yaml if items changed status
+   - Check git log --since='30 minutes ago' for unrecorded decisions
+   - Only write files that actually need updating
+
+3. OUTPUT: Return a single summary line, e.g.:
+   'Heartbeat: updated session-context, added daily log entry. Scheduled every 30 min.'
+   or 'Heartbeat: updated progress M1.3→done.'
+
+Do NOT run /o heartbeat. Do NOT invoke any skills. Do NOT read files you don't need to write.",
+  run_in_background: true,
+  mode: "bypassPermissions"
+)
 ```
 
-**The cron prompt is NOT `/o heartbeat`.** It is a minimal inline instruction. This prevents:
-- Recursive cron creation (heartbeat creating more heartbeats)
-- Full skill invocation overhead (preamble, file reads, scheduling checks)
-- Context window bloat from repeated skill machinery
+**What the main context sees:** Just the one-line summary when the subagent completes. All file reads, writes, scheduling, and git checks happen in the subagent's context — not the main window.
 
-Store in `state/session-context.md`:
-- `heartbeat_scheduled: true`
-- `heartbeat_job_id: <id>`
-- `heartbeat_created_at: <ISO 8601 timestamp>`
+**`/o heartbeat stop`** — this one runs inline (it's just two tool calls): `CronList` to find jobs, `CronDelete` on each, then remove heartbeat fields from session-context. Confirm: `Heartbeat cancelled.`
 
-On `/o heartbeat stop`, use `CronDelete` with the stored job ID. Remove all three fields.
-
-**The audit (context-budget conscious):**
-
-**CRITICAL: Minimize context usage.** Every tool call, file read, and output line consumes context window. The heartbeat must be the cheapest possible operation — it runs repeatedly and must not crowd out actual work.
-
-**Step 0 — Quick mental check (NO tool calls).** Before reading any files or running any commands, reflect on what you've done since the last heartbeat using only your conversation memory:
-- Did you make any commits? Any decisions? Any significant progress?
-- If the answer is "no, I've been doing normal coding work" → output `Heartbeat: all current. ✓` and **stop**. No file reads, no git log, no tool calls. This is the fast path and should be the common case.
-
-**Step 1 — Only if you did something noteworthy**, run the audit:
-
-1. **Unrecorded decisions** — `git log --since="30 minutes ago" --oneline` (one command). If nothing, skip.
-
-2. **Session-context freshness** — update `state/session-context.md` only if your working state actually changed.
-
-3. **Daily log gaps** — append to `memory/YYYY-MM-DD.md` only if significant work happened.
-
-4. **Progress drift** — update `progress.yaml` only if items should be marked done.
-
-5. **Doc staleness** — flag only if you changed an API, config, or command.
+**Cron-triggered runs** use the inline audit prompt (set up by the subagent above). The cron prompt is NOT `/o heartbeat` — it's a minimal self-contained instruction. This prevents recursive scheduling and context bloat.
 
 **Rules:**
-- **The no-op case must use ZERO tool calls.** Just output the one-line "all current" message. This is critical for context budget.
-- Keep it fast. Don't run full test suites or deep audits — that's `/o docs` and `/o checkpoint`.
-- Don't ask the user questions. Fix what you can silently, report what you did.
-- This is the "git status" of Orchestra — quick, informational, occasionally catches drift.
-- The only user-facing message about scheduling is on first setup: "Scheduled every 30 min."
+- The no-op case (nothing happened) must use ZERO tool calls in the main context.
+- ALL file I/O happens in the subagent, never inline.
+- Don't ask the user questions. Fix what you can silently, report what was done.
+- The only user-facing output is the one-line summary from the subagent.
 
 ### `/o close` — Mark thread as completed
 
@@ -583,17 +618,20 @@ After update completes, check if heartbeat is scheduled (look for `heartbeat_sch
 
 ### Post-work audit
 
-When `/o` detects that agents have finished work (new handoffs exist, progress was updated since last session), also audit Orchestra state:
+When `/o` detects that agents have finished work (new handoffs exist, progress was updated since last session), also audit Orchestra state.
 
-1. Read all `verification.md` files for active threads — flag any with FAILs or PENDINGs
-2. Check if MEMORY.md was updated with new learnings
-3. Check if decisions made during work were recorded in `decisions/`
-4. Check if `sessions/` has a log for significant work
-5. Check if repo docs (README, CLAUDE.md, etc.) may be stale given recent changes — flag with a suggestion to run `/o docs`
-6. Check if any active threads are 100% done — suggest `/o close` to keep the dashboard clean
-7. Flag anything stale or missing and offer to update it
+**IMPORTANT: Delegate to a subagent.** Post-work audits read many files across threads. Spawn a background Agent to do the audit and return a summary of what's stale/missing.
 
-This is how the user keeps Orchestra honest after parallel agent runs.
+The subagent checks:
+1. All `verification.md` files for active threads — flag any with FAILs or PENDINGs
+2. Whether MEMORY.md was updated with new learnings
+3. Whether decisions made during work were recorded in `decisions/`
+4. Whether `sessions/` has a log for significant work
+5. Whether repo docs (README, CLAUDE.md, etc.) may be stale — flag with a suggestion to run `/o docs`
+6. Whether any active threads are 100% done — suggest `/o close`
+7. Flag anything stale or missing
+
+The main agent receives the summary and presents action items to the user.
 
 ## Memory
 

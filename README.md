@@ -225,13 +225,15 @@ Plans, research, and specs created outside Orchestra can be imported into thread
 
 The biggest failure mode in agent coordination: the agent gets deep into coding and forgets to update state. Decisions go unrecorded, progress isn't tracked, docs go stale. You end up saying "btw update orchestra" every 30 minutes.
 
-Orchestra solves this with three layers:
+Orchestra solves this with three layers, plus a context-saving delegation pattern:
 
 **Layer 1 — Instruction file rules (all agents).** During `setup link`, Orchestra injects trigger-action rules directly into the repo's instruction file (CLAUDE.md, AGENTS.md, .cursor/rules). These are specific: "after you commit code, update session-context.md and daily log." Works across every agent. Zero runtime cost.
 
 **Layer 2 — `/o heartbeat` with auto-schedule (Claude Code).** Fully automatic. The `SessionStart` hook tells the agent to enable heartbeat on every new session — no user action needed. Uses a lightweight inline cron prompt (not a recursive skill invocation) to check state every 30 minutes with near-zero context cost. Always deduplicates cron jobs before creating new ones to prevent compaction-triggered job leaks. The user never manages it.
 
 **Layer 3 — Channels heartbeat (Claude Code, future).** Claude Code Channels (v2.1.80+, research preview) allow MCP servers to push events into a running session. An Orchestra Channel server could fire on git commits instead of a timer — true event-driven awareness. Blocked on Channels stabilizing (known bugs in v2.1.80-81).
+
+**Subagent delegation — protect the main context window.** Heavy operations like `/o checkpoint`, `/o docs`, and post-work audits read and write many files. Instead of doing this inline (which fills the context window and accelerates compaction), Orchestra instructs the agent to spawn background subagents for multi-file writes. The main agent passes all relevant context in the subagent prompt; the subagent writes to `.orchestra/` files and returns a one-line summary. The files themselves are the persistent log — no context is lost.
 
 ## Works with
 
