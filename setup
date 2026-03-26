@@ -145,35 +145,10 @@ orchestra_rules_block() {
   cat << 'RULESEOF'
 
 <!-- orchestra-rules-start -->
-## Orchestra — Agent Awareness Rules
+## Orchestra
 
-This repo uses Orchestra for multi-agent coordination. The `/o` command shows project status. Memory, progress, and context are auto-injected via hooks at session start.
-
-### BLOCKING rules — do these BEFORE moving on
-
-These are not optional post-hoc updates. They are gates. Do not proceed to the next phase until the Orchestra update is done.
-
-| Before you... | Do this FIRST |
-|---|---|
-| Start implementing/coding | Write your plan to `.orchestra/threads/<thread>/plan.md` (or update it). If you just finished researching, save findings to `conversation.md` or `research-*.md`. The plan must exist in Orchestra before the first line of code. |
-| Spawn a subagent for implementation | Update `session-context.md` with what you're about to build and why. The subagent has no memory — Orchestra is how it gets context. |
-| Move to the next milestone | Verify the current milestone is updated in `progress.yaml` + `verification.md` first. |
-
-### IMMEDIATE rules — do these right after the action
-
-| After you... | Update these files |
-|---|---|
-| Finish researching (reading code, exploring, scanning) | `conversation.md` (append findings) + `session-context.md` (update current state) |
-| Commit or push code | `session-context.md` + `memory/YYYY-MM-DD.md` |
-| Merge a PR | `progress.yaml` + daily log → prompt `/o close` if thread is done |
-| Make an architecture/infra/tool decision | `decisions/NNN-slug.md` + `MEMORY.md` |
-| Hit a gotcha or workaround | `MEMORY.md` (Gotchas section) |
-| Change documented behavior (API, config, deploy) | Update the relevant repo doc NOW |
-| Complete a milestone item | `progress.yaml` + `verification.md` + check if docs need updating |
-
-**Why this matters:** Research you don't save is research that dies at compaction. Plans you don't write to Orchestra are invisible to the next session. If it's not in `.orchestra/`, it didn't happen.
-
-**Claude Code users:** Heartbeat (automatic state checks every 30 min) is enabled automatically on session start via hooks. No manual setup needed.
+This repo uses Orchestra for multi-agent coordination (`/o` for status, `/o checkpoint` to save).
+Context is auto-injected at session start. The agent is nudged to checkpoint automatically.
 <!-- orchestra-rules-end -->
 RULESEOF
 }
@@ -377,6 +352,7 @@ install_hooks() {
     "PreCompact||orchestra-pre-compact.sh"
     "Stop||orchestra-stop.sh"
     "SubagentStop||orchestra-subagent-stop.sh"
+    "PostToolUse|Edit|Write|orchestra-post-tool-nudge.sh"
   )
 
   for entry in "${hook_keys[@]}"; do

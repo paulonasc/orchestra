@@ -1,6 +1,13 @@
 ---
 name: o
-description: Multi-agent coordination through files. Memory, threads, briefings, handoffs.
+description: |
+  Multi-agent coordination through files. Memory, threads, progress, handoffs.
+  Use when asked to "save progress", "checkpoint", "what's the status",
+  "hand off", "what are we working on", or "close the thread".
+  Proactively suggest /o checkpoint when: the user says "done", "that's working",
+  "looks good", or "all set"; a milestone is completed; before spawning
+  implementation subagents; or after a long coding stretch without saving.
+  Proactively suggest /o close when the user says "merged", "shipped", or "deployed".
 ---
 
 ## Preamble (run first)
@@ -441,26 +448,42 @@ Scans all documentation in the repo (and linked repos) against recent changes. F
 
 Force-flush all in-flight context to Orchestra files. Use before stepping away, before a long operation, or whenever you want a compaction-proof snapshot.
 
-**IMPORTANT: Delegate to a subagent.** Checkpoint writes 6+ files — doing this inline consumes significant context. Follow the "Context budget" pattern above: spawn a background Agent with all the context it needs, let it do the writes, get back a one-line summary.
+**IMPORTANT: Delegate to a subagent.** Checkpoint writes multiple files — doing this inline consumes significant context. Follow the "Context budget" pattern above: spawn a background Agent with all the context it needs, let it do the writes, get back a one-line summary.
 
-**What the subagent must write:**
+**Before spawning the checkpoint subagent, answer each category:**
 
-1. **`state/sessions/{session-id}.md`** — full snapshot of current state: what you're working on, key context, decisions made, current progress, next steps. Also copy to **`state/session-context.md`** for backwards compat.
-2. **`threads/NNN-slug/progress.yaml`** — ensure all item statuses reflect reality right now
-3. **`verification.md`** — record any test results from this session not yet captured
-4. **`conversation.md`** — append any design decisions or important discussion from this session
-5. **`memory/YYYY-MM-DD.md`** — log what was accomplished so far today
-6. **`MEMORY.md`** — if you learned anything durable this session (patterns, gotchas, preferences), write it now
+- **Code:** What files did you create or edit?
+- **Decisions:** What architectural, tool, or approach decisions did you make (and why)?
+- **Research:** What did you investigate, compare, or evaluate?
+- **Gotchas:** What surprised you or broke unexpectedly?
+- **Progress:** Which milestone items are now done, in-progress, or blocked?
+- **Next:** What should happen next?
 
-**What you pass in the subagent prompt:** Summarize everything from your conversation memory — what was built, what decisions were made, what's blocked, what tests passed/failed, what the user said. The subagent has no conversation context; your prompt IS its context. Be thorough here — this is what survives compaction.
+Write down your answers (they become the subagent prompt). The subagent has no conversation context — your answers ARE its context. Be thorough here — this is what survives compaction.
 
-After the subagent returns, confirm to the user:
+**What the subagent writes (per-session files only — no shared file conflicts):**
+
+1. **`state/sessions/{session-id}.md`** — ALL state goes here. This is the primary write target. Fill in every section: Working on, Progress updates, Decisions made, Research findings, Gotchas, Next steps.
+2. **`memory/YYYY-MM-DD.md`** — append-only daily log. Prefix each entry with `[session: {session-id}]` so concurrent sessions don't interleave ambiguously.
+3. **`decisions/NNN-slug.md`** — new decision files for any decisions made this session. Use unique filenames (next available number + descriptive slug) so concurrent agents never collide.
+
+**What the subagent does NOT write:**
+
+- `state/session-context.md` — read cache, updated by the session-start hook at next session
+- `threads/NNN-slug/progress.yaml` — reconciled at session-start, not during checkpoint
+- `MEMORY.md` — updated at session-start reconciliation or `/o close`
+
+After the subagent returns, reset the edit counter and confirm to the user:
+```bash
+echo 0 > .orchestra/.logs/edit-count-{session-id}
+```
 ```
 Checkpoint saved (via subagent):
-  ✓ session-context, progress, daily log, conversation log updated
+  ✓ session file, daily log updated
+  ✓ {N} decision(s) recorded (if any)
 ```
 
-**This is the "save game" button.** Everything needed to resume from scratch is now on disk. If compaction happens or the session ends, nothing is lost.
+**This is the "save game" button.** Everything needed to resume from scratch is now on disk. If compaction happens or the session ends, nothing is lost. Other concurrent sessions will pick up your changes at their next session-start.
 
 ### `/o heartbeat` — Periodic state audit
 

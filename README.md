@@ -38,7 +38,8 @@ Agents read and write these files. Hooks auto-inject context at session start. T
 | Multi-repo work | You copy-paste between terminals | Shared `.orchestra/` dir, briefings scoped per repo, handoffs between agents |
 | Concurrent sessions | Two agents stomp on each other's state | Session-scoped context files, auto-detected with warnings |
 | "Did we decide X?" | You dig through chat history | `decisions/` directory, append-only, searchable |
-| Agent forgets to update state | You say "btw update orchestra" every 30 min | Blocking rules (must save research before coding) + heartbeat auto-checks |
+| Agent forgets to update state | You say "btw update orchestra" every 30 min | Mechanical nudge after 10 edits + pattern-match triggers in skill description |
+| Frontend agent gets API noise | Shared context dumps everything | Repo-aware filtering — each agent only sees relevant memory and logs |
 
 ## Install — 30 seconds
 
@@ -70,9 +71,9 @@ git clone https://github.com/orchestrahq/orchestra.git ~/.orchestra
 
 Each linked repo gets:
 - `.orchestra.link` — pointer to the shared `.orchestra/` directory
-- `.claude/skills/o/SKILL.md` — the `/o` command
-- `.claude/settings.json` — lifecycle hooks
-- **Awareness rules** in CLAUDE.md (safely scoped between HTML comment markers — your content is never touched)
+- `.claude/skills/o/SKILL.md` — the `/o` command with pattern-match triggers
+- `.claude/settings.json` — lifecycle hooks (SessionStart, PreCompact, PostToolUse nudge, etc.)
+- **Awareness rules** in CLAUDE.md (3 lines between HTML comment markers — your content is never touched)
 
 ## The `/o` command
 
@@ -114,33 +115,36 @@ Each thread has: spec, plan, progress (per-thread `progress.yaml` with milestone
 
 Long sessions get compacted — Claude summarizes the conversation and drops older messages, destroying in-flight context. Orchestra solves this:
 
-- Agent continuously flushes state to `state/sessions/{session-id}.md` after every significant action
-- `PreCompact` hook feeds session context into the summarizer
+- PostToolUse nudge ensures checkpoints happen regularly (mechanical, not voluntary)
+- `PreCompact` hook writes a breadcrumb to the daily log + stamps the session file
+- `PreCompact` hook feeds session context into the summarizer so it's preserved
 - `PostCompact` hook re-injects context + memory + progress from disk
-- `/o checkpoint` does a full manual flush (6+ files, delegated to a background subagent)
+- `/o checkpoint` does a full flush (session file + daily log + decisions, delegated to a background subagent)
 
-No manual intervention. Context is already on disk because the agent keeps it current.
+No manual intervention. The nudge hook ensures state is on disk before compaction hits.
 
-### Concurrent sessions
+### Concurrent sessions — per-session write isolation
 
-Multiple agents can work on the same repo simultaneously. Each session gets its own context file (`state/sessions/{session-id}.md`) instead of sharing a singleton that would get stomped by the last writer.
+Multiple agents can work on the same repo simultaneously. Each session writes to its own file only — no concurrent conflicts on shared state.
 
 - Session start generates a unique ID (timestamp + PID) and creates an isolated context file
+- **Checkpoints write to per-session files only** — `state/sessions/{id}.md` + append-only daily log + unique decision files
+- Shared files (`session-context.md`, `progress.yaml`, `MEMORY.md`) are updated by merge-on-read at session start, not during checkpoints
 - Other active sessions are auto-detected with a warning
 - Session cleanup on exit (PID-matched) + stale session pruning (>24h)
-- `state/session-context.md` still written as a copy for backwards compatibility
+- `state/session-context.md` still read as fallback for backwards compatibility
 
-### Agent awareness — three layers
+### Agent awareness — mechanical enforcement
 
-The biggest failure mode: the agent gets deep into coding and forgets to update state. Orchestra prevents this at three levels:
+The biggest failure mode: the agent gets deep into coding and forgets to update state. Instruction-based rules ("remember to update X after Y") don't work — agents prioritize the user's visible task over invisible bookkeeping. Orchestra prevents this mechanically:
 
-**Layer 1 — Blocking rules (all agents).** Injected into CLAUDE.md during setup. Two categories:
-- *Blocking*: "Before coding, write your plan to Orchestra first." "Before spawning subagents, update session context." These are gates — the agent must complete them before proceeding.
-- *Immediate*: "After researching, save findings." "After committing, update daily log." Post-action triggers.
+**Layer 1 — PostToolUse nudge hook.** Counts code edits per session. After 10 edits without a checkpoint, the agent sees: "Orchestra: 12 edits since last checkpoint. Run /o checkpoint to save progress." Mechanical — no remembering required.
 
-**Layer 2 — Heartbeat (Claude Code).** Auto-scheduled on first `/o` run. Every 30 minutes, a lightweight cron checks if progress was made and updates state. Zero tool calls on the no-op path.
+**Layer 2 — Pattern-match triggers in skill description.** The `/o` skill description lives in the system prompt (permanent attention, never compacted) and includes: "Proactively suggest /o checkpoint when: the user says 'done', 'looks good', or 'all set'." The agent pattern-matches on user phrases, not process rules.
 
-**Layer 3 — Channels (Claude Code, future).** Event-driven awareness via MCP Channels — fire on git commits instead of a timer. Blocked on Channels API stabilizing.
+**Layer 3 — Structured recall template.** When `/o checkpoint` runs, the agent answers 6 categories (Code/Decisions/Research/Gotchas/Progress/Next) before passing to a subagent. This prevents vague checkpoints like "built the footer" — each category prompts specific recall.
+
+**Layer 4 — Heartbeat (safety net).** Auto-scheduled every 30 min as a backstop. Less critical now that nudge + triggers handle the common case.
 
 ### Verification
 
@@ -156,6 +160,16 @@ A progress item can't be marked `done` until verification passes. No unverified 
 **Briefings** are generated, self-contained task documents — one thread produces multiple briefings scoped per repo. Each agent gets exactly what it needs.
 
 **Handoffs** are agent-to-agent async messages. When an agent finishes work another depends on, it writes a handoff. The receiving agent picks it up at session start.
+
+### Repo-aware context filtering
+
+When `.orchestra/` is shared across repos, each agent only gets context relevant to its repo:
+
+- **MEMORY.md** — entries tagged `[repo: api]` only show when working in the API repo. Untagged entries (global) always show.
+- **Daily logs** — entries prefixed `[session: id] ... [repo: frontend]` are filtered by current repo basename.
+- **Progress** — only the active thread is shown (already scoped).
+
+This prevents the frontend agent from seeing API gotchas and vice versa. Tag your MEMORY.md entries with `[repo: name]` for filtering.
 
 ### Documentation sync
 
@@ -191,6 +205,20 @@ root: /Users/richard/Projects/pied-piper/.orchestra
 - Every `/o` invocation checks if the installed SKILL.md is stale — re-installs automatically
 - `/o update` pulls latest, re-links all repos, shows what's new via changelog
 - CLAUDE.md rules are safely updated between `<!-- orchestra-rules-start -->` / `<!-- orchestra-rules-end -->` markers — your content above and below is never touched
+
+## Eval system
+
+Orchestra has an automated eval system that tests whether agents actually use it correctly. See [evals/README.md](evals/README.md) for full documentation.
+
+```bash
+# Deterministic tests (fast, no API keys)
+bun test evals/
+
+# LLM behavioral evals (needs Claude auth + OPENAI_API_KEY for judge)
+EVALS=1 bun test evals/cases/
+```
+
+Three tiers: hook unit tests (bash scripts), deterministic integration (hook output assertions), and LLM behavioral evals (real Claude Code sessions via Agent SDK + OpenAI judge for pass/fail).
 
 ## License
 
