@@ -7,3 +7,4 @@
 node_modules/
 evals/runs/
 .claude/settings.json
+.claude/
