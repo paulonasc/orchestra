@@ -18,12 +18,22 @@ ORCH_ROOT="$(find_orchestra_root)" || exit 0
 echo "=== ORCHESTRA CONTEXT (post-compaction) ==="
 echo ""
 
-# 1. Session context — just the "Working on" and "Next steps" lines
-if [ -f "$ORCH_ROOT/state/session-context.md" ]; then
-  echo "Session: $(grep -A1 '## Working on' "$ORCH_ROOT/state/session-context.md" 2>/dev/null | tail -1)"
-  NEXT=$(grep -A1 '## Next steps' "$ORCH_ROOT/state/session-context.md" 2>/dev/null | tail -1)
+# 1. Session context — find current session file by PID match
+SESSION_FILE=""
+if [ -d "$ORCH_ROOT/state/sessions" ]; then
+  for f in "$ORCH_ROOT/state/sessions"/*-$$.md "$ORCH_ROOT/state/sessions"/*-$PPID.md; do
+    if [ -f "$f" ]; then
+      SESSION_FILE="$f"
+      break
+    fi
+  done
+fi
+
+if [ -n "$SESSION_FILE" ] && [ -f "$SESSION_FILE" ]; then
+  echo "Session: $(grep -A1 '## Working on' "$SESSION_FILE" 2>/dev/null | tail -1)"
+  NEXT=$(grep -A1 '## Next steps' "$SESSION_FILE" 2>/dev/null | tail -1)
   [ -n "$NEXT" ] && echo "Next: $NEXT"
-  echo "  → Read $ORCH_ROOT/state/session-context.md for full context"
+  echo "  → Read $SESSION_FILE for full context"
 fi
 
 # 2. Active thread — just the thread name

@@ -100,12 +100,6 @@ Implementing user registration endpoint with email verification
 `;
       await writeFile(sessionFile, sessionContent);
 
-      // Also create session-context.md (backward compat — pre-compact reads it)
-      await writeFile(
-        join(orchestra, 'state', 'session-context.md'),
-        sessionContent,
-      );
-
       // Determine today's date using bash so it matches what the hooks produce.
       // This avoids UTC vs local timezone mismatches between JS and bash.
       const dateProc = Bun.spawnSync(['date', '+%Y-%m-%d']);

@@ -63,9 +63,6 @@ Repo: $CURRENT_REPO
 (filled by checkpoint)
 SESSEOF
 
-# Also write session-context.md for backwards compat (post-compact, heartbeat)
-cp "$ORCH_ROOT/state/sessions/${SESSION_ID}.md" "$ORCH_ROOT/state/session-context.md" 2>/dev/null || true
-
 TODAY="$(date +%Y-%m-%d)"
 YESTERDAY="$(date -v-1d +%Y-%m-%d 2>/dev/null || date -d 'yesterday' +%Y-%m-%d 2>/dev/null)"
 
@@ -133,11 +130,6 @@ fi
 if [ -n "$SESSION_CONTEXT" ]; then
   echo "=== SESSION CONTEXT (from $SESSION_COUNT active session(s)) ==="
   printf "$SESSION_CONTEXT"
-  echo ""
-elif [ -f "$ORCH_ROOT/state/session-context.md" ]; then
-  # Backward compat: fall back to session-context.md if no session files have content
-  echo "=== SESSION CONTEXT ==="
-  cat "$ORCH_ROOT/state/session-context.md" 2>/dev/null
   echo ""
 fi
 

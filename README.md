@@ -129,10 +129,9 @@ Multiple agents can work on the same repo simultaneously. Each session writes to
 
 - Session start generates a unique ID (timestamp + PID) and creates an isolated context file
 - **Checkpoints write to per-session files only** — `state/sessions/{id}.md` + append-only daily log + unique decision files
-- Shared files (`session-context.md`, `progress.yaml`, `MEMORY.md`) are updated by merge-on-read at session start, not during checkpoints
+- Shared files (`progress.yaml`, `MEMORY.md`) are updated by merge-on-read at session start, not during checkpoints
 - Other active sessions are auto-detected with a warning
 - Session cleanup on exit (PID-matched) + stale session pruning (>24h)
-- `state/session-context.md` still read as fallback for backwards compatibility
 
 ### Agent awareness — mechanical enforcement
 

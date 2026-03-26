@@ -44,9 +44,9 @@ fi
 # --- End safety net ---
 
 # Echo session context so the compaction summarizer preserves it
-if [ -f "$ORCH_ROOT/state/session-context.md" ]; then
+if [ -n "$SESSION_FILE" ] && [ -f "$SESSION_FILE" ]; then
   echo "=== ORCHESTRA SESSION CONTEXT (preserve in summary) ==="
-  cat "$ORCH_ROOT/state/session-context.md" 2>/dev/null
+  cat "$SESSION_FILE" 2>/dev/null
 fi
 
 exit 0

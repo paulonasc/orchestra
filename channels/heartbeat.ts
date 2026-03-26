@@ -48,7 +48,7 @@ async function sendHeartbeat(trigger: "timer" | "git-commit") {
       params: {
         content: [
           `Orchestra heartbeat (${trigger}).`,
-          "Run /o heartbeat — check for unrecorded decisions, stale session-context, missing daily log entries, and progress updates.",
+          "Run /o heartbeat — check for unrecorded decisions, stale session files, missing daily log entries, and progress updates.",
         ].join(" "),
         meta: {
           source: "orchestra",
