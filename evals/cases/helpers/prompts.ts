@@ -70,6 +70,15 @@ I want to add a caching layer to this API. Here's what I'm thinking:
 
 Document this plan first. Write it up as a principal engineer would — options considered, tradeoffs, recommendation, implementation steps.`;
 
+export const DECISIONS_RECORDED_AFTER_REVIEW = `\
+We just finished reviewing the products API. Here are the decisions we made:
+
+1. Consensus quorum: require >= 2 agents agreeing before auto-updating a product field
+2. Use database transactions for verification upserts to prevent partial writes
+3. Use CREATE INDEX CONCURRENTLY instead of plain CREATE INDEX to avoid write locks
+
+These are architectural decisions that affect how the system works. Record them properly.`;
+
 export const USER_SHIPPED_SUGGESTS_CLOSE = `\
 This repo uses Orchestra for multi-agent coordination (\`/o\` for status, \`/o checkpoint\` to save).
 The active thread is 001-test-feature. All items in the thread are done.
