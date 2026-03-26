@@ -152,8 +152,10 @@ This repo uses Orchestra for multi-agent coordination. State lives in `.orchestr
 - **Plans** go in `.orchestra/threads/<active-thread>/plan.md`
 - **Decisions** go in `.orchestra/decisions/NNN-slug.md`
 - **Research** goes in `.orchestra/threads/<active-thread>/research.md`
+- **Verification** results go in `.orchestra/threads/<active-thread>/verification.md`
 - `/o` shows the dashboard and active thread. `/o checkpoint` saves progress.
 - When the user says "document this plan", "record this decision", or "save research" — write to the paths above, not to random directories.
+- When tests pass or the user reports test results — update verification.md with PASS/FAIL, then suggest `/o checkpoint`.
 <!-- orchestra-rules-end -->
 RULESEOF
 }

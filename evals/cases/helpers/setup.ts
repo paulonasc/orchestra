@@ -164,15 +164,22 @@ export async function createTestWorkDir(name: string): Promise<TestWorkDir> {
     JSON.stringify(settings, null, 2),
   );
 
-  // Simplified CLAUDE.md with Orchestra rules
+  // CLAUDE.md with Orchestra rules (must match setup's orchestra_rules_block())
   await writeFile(
     join(root, 'CLAUDE.md'),
     `# Project Rules
 
-## Orchestra (always active)
-- Use /o checkpoint to save progress after significant work
-- Use /o close when a thread is shipped/merged/deployed
-- Record architectural decisions in .orchestra/decisions/ immediately
+## Orchestra
+
+This repo uses Orchestra for multi-agent coordination. State lives in \`.orchestra/\`.
+
+- **Plans** go in \`.orchestra/threads/<active-thread>/plan.md\`
+- **Decisions** go in \`.orchestra/decisions/NNN-slug.md\`
+- **Research** goes in \`.orchestra/threads/<active-thread>/research.md\`
+- **Verification** results go in \`.orchestra/threads/<active-thread>/verification.md\`
+- \`/o\` shows the dashboard and active thread. \`/o checkpoint\` saves progress.
+- When the user says "document this plan", "record this decision", or "save research" — write to the paths above, not to random directories.
+- When tests pass or the user reports test results — update verification.md with PASS/FAIL, then suggest \`/o checkpoint\`.
 `,
   );
 

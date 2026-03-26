@@ -12,6 +12,10 @@ description: |
   this decision": write to .orchestra/threads/<active-thread>/plan.md for plans,
   .orchestra/decisions/NNN-slug.md for decisions, .orchestra/threads/<active-thread>/
   research.md for research. Run /o to find the active thread if unsure.
+  BEFORE answering, when the user mentions test results ("tests passed", "all green",
+  "0 failures", "build clean", "lint clean") or you run tests: FIRST update
+  .orchestra/threads/<active-thread>/verification.md with PASS/FAIL results,
+  THEN respond to the user. Do not skip the update even if the user asked a question.
 ---
 
 ## Preamble (run first)

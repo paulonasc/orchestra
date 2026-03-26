@@ -144,6 +144,25 @@ export async function writeAuthMigrationThread(env: TestWorkDir): Promise<void> 
 }
 
 /**
+ * Verification test: write a verification.md with all items PENDING.
+ * The agent should update these to PASS after hearing test results.
+ */
+export async function writeVerificationPending(env: TestWorkDir): Promise<void> {
+  const threadDir = join(env.orchestra, 'threads', '001-test-feature');
+  await writeFile(
+    join(threadDir, 'verification.md'),
+    `# Verification: 001-test-feature
+
+## Checklist
+- [ ] Auth endpoints return correct responses — PENDING
+- [ ] JWT token generation works — PENDING
+- [ ] Password hashing with bcrypt — PENDING
+- [ ] Login endpoint integration test — PENDING
+`,
+  );
+}
+
+/**
  * User-done test: pre-populate logger middleware and session context
  * to simulate prior work the agent supposedly completed earlier.
  */

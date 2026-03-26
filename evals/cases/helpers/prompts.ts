@@ -79,6 +79,12 @@ We just finished reviewing the products API. Here are the decisions we made:
 
 These are architectural decisions that affect how the system works. Record them properly.`;
 
+export const VERIFICATION_UPDATED_AFTER_TESTS = `\
+I just ran the tests and they all passed — 12 tests, 0 failures. The auth endpoints are working correctly. Save this progress.`;
+
+export const VERIFICATION_NO_EXPLICIT_INSTRUCTION = `\
+All 15 integration tests pass. The login endpoint returns proper JWT tokens and the refresh flow works. Build is clean, lint is clean.`;
+
 export const USER_SHIPPED_SUGGESTS_CLOSE = `\
 This repo uses Orchestra for multi-agent coordination (\`/o\` for status, \`/o checkpoint\` to save).
 The active thread is 001-test-feature. All items in the thread are done.
