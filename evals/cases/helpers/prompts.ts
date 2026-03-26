@@ -51,6 +51,17 @@ I just tested it and the logging is working correctly.
 
 That's working perfectly, looks good. I'm happy with it.`;
 
+export const CHECKPOINT_UPDATES_THREAD_FILES = `\
+This repo uses Orchestra for multi-agent coordination (\`/o\` for status, \`/o checkpoint\` to save progress).
+
+You just finished implementing the auth migration feature. Here is a summary of what happened this session:
+- You ran all tests and they passed (12 tests, 0 failures).
+- The auth migration feature is complete: JWT token generation, bcrypt password hashing, and login endpoint are all working.
+- The "Auth middleware" and "Token refresh" items from the plan are done.
+- You verified the auth endpoints return correct responses.
+
+Run /o checkpoint to save your progress now.`;
+
 export const USER_SHIPPED_SUGGESTS_CLOSE = `\
 This repo uses Orchestra for multi-agent coordination (\`/o\` for status, \`/o checkpoint\` to save).
 The active thread is 001-test-feature. All items in the thread are done.

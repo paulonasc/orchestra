@@ -87,6 +87,63 @@ Use express-rate-limit with the default in-memory store. Set 100 requests per 15
 }
 
 /**
+ * Checkpoint-thread-files test: set up a thread with in-progress items
+ * and pending verification entries, plus a MEMORY.md file. The checkpoint
+ * should update all of these.
+ */
+export async function writeAuthMigrationThread(env: TestWorkDir): Promise<void> {
+  const threadDir = join(env.orchestra, 'threads', '001-test-feature');
+
+  // Overwrite progress.yaml with auth migration items in-progress
+  await writeFile(
+    join(threadDir, 'progress.yaml'),
+    `milestones:
+  - name: M0 Setup
+    items:
+      - name: Project scaffold
+        status: done
+      - name: CI/CD pipeline
+        status: done
+  - name: M1 Auth
+    items:
+      - name: Auth middleware
+        status: in-progress
+      - name: Token refresh
+        status: in-progress
+      - name: Rate limiting
+        status: pending
+`,
+  );
+
+  // Create verification.md with pending test results
+  await writeFile(
+    join(threadDir, 'verification.md'),
+    `# Verification: 001-test-feature
+
+## Auth middleware
+- [ ] PENDING — Unit tests for JWT generation
+- [ ] PENDING — Integration test for login endpoint
+
+## Token refresh
+- [ ] PENDING — Refresh token rotation test
+
+## Rate limiting
+- [ ] PENDING — Rate limit threshold test
+`,
+  );
+
+  // Create a MEMORY.md at the orchestra root with existing learnings
+  await writeFile(
+    join(env.orchestra, '..', 'MEMORY.md'),
+    `# MEMORY
+
+## Patterns
+- Use zod for validation in all API endpoints
+`,
+  );
+}
+
+/**
  * User-done test: pre-populate logger middleware and session context
  * to simulate prior work the agent supposedly completed earlier.
  */

@@ -456,22 +456,25 @@ Force-flush all in-flight context to Orchestra files. Use before stepping away, 
 - **Decisions:** What architectural, tool, or approach decisions did you make (and why)?
 - **Research:** What did you investigate, compare, or evaluate?
 - **Gotchas:** What surprised you or broke unexpectedly?
+- **Tests:** What tests did you run? What passed? What failed? Include counts and specific failures.
 - **Progress:** Which milestone items are now done, in-progress, or blocked?
 - **Next:** What should happen next?
 
 Write down your answers (they become the subagent prompt). The subagent has no conversation context — your answers ARE its context. Be thorough here — this is what survives compaction.
 
-**What the subagent writes (per-session files only — no shared file conflicts):**
+**What the subagent writes:**
 
-1. **`state/sessions/{session-id}.md`** — ALL state goes here. This is the primary write target. Fill in every section: Working on, Progress updates, Decisions made, Research findings, Gotchas, Next steps.
-2. **`memory/YYYY-MM-DD.md`** — append-only daily log. Prefix each entry with `[session: {session-id}]` so concurrent sessions don't interleave ambiguously.
-3. **`decisions/NNN-slug.md`** — new decision files for any decisions made this session. Use unique filenames (next available number + descriptive slug) so concurrent agents never collide.
+1. **`state/sessions/{session-id}.md`** — session state snapshot (replaces session-context.md). Fill in every section: Working on, Progress updates, Decisions made, Research findings, Gotchas, Next steps.
+2. **`threads/NNN-slug/progress.yaml`** — update item statuses to reflect reality. Mark completed items as `done`, new work as `in-progress`.
+3. **`threads/NNN-slug/verification.md`** — record any test results from this session. Update PENDING items to PASS/FAIL with details.
+4. **`threads/NNN-slug/conversation.md`** — append design decisions or important discussion from this session.
+5. **`memory/YYYY-MM-DD.md`** — append-only daily log. Prefix each entry with `[session: {session-id}]` so concurrent sessions don't interleave ambiguously.
+6. **`decisions/NNN-slug.md`** — new decision files for any decisions made this session. Use unique filenames (next available number + descriptive slug) so concurrent agents never collide.
+7. **`MEMORY.md`** — durable learnings (gotchas, patterns, preferences). Append new entries; never overwrite existing ones.
 
 **What the subagent does NOT write:**
 
-- `state/session-context.md` — read cache, updated by the session-start hook at next session
-- `threads/NNN-slug/progress.yaml` — reconciled at session-start, not during checkpoint
-- `MEMORY.md` — updated at session-start reconciliation or `/o close`
+- `state/session-context.md` — read cache, updated by hooks only (replaced by per-session files)
 
 After the subagent returns, reset the edit counter and confirm to the user:
 ```bash
@@ -479,7 +482,7 @@ echo 0 > .orchestra/.logs/edit-count-{session-id}
 ```
 ```
 Checkpoint saved (via subagent):
-  ✓ session file, daily log updated
+  ✓ session file, daily log, thread files updated
   ✓ {N} decision(s) recorded (if any)
 ```
 
