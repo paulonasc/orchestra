@@ -10,7 +10,8 @@ import { mkdtemp, rm, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const ORCHESTRA_SRC = '/Users/paulonasc/Documents/orchestra';
+// Resolve Orchestra source root relative to this file (evals/cases/helpers/ → repo root)
+const ORCHESTRA_SRC = join(import.meta.dir, '..', '..', '..');
 
 /** Paths inside a test working directory. */
 export interface TestWorkDir {
