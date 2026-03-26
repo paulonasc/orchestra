@@ -119,7 +119,7 @@ Long sessions get compacted — Claude summarizes the conversation and drops old
 - `PreCompact` hook writes a breadcrumb to the daily log + stamps the session file
 - `PreCompact` hook feeds session context into the summarizer so it's preserved
 - `PostCompact` hook re-injects context + memory + progress from disk
-- `/o checkpoint` does a full flush (session file + daily log + decisions, delegated to a background subagent)
+- `/o checkpoint` does a full flush (session file + thread files + daily log + decisions + MEMORY.md, delegated to a background subagent)
 
 No manual intervention. The nudge hook ensures state is on disk before compaction hits.
 
@@ -128,8 +128,9 @@ No manual intervention. The nudge hook ensures state is on disk before compactio
 Multiple agents can work on the same repo simultaneously. Each session writes to its own file only — no concurrent conflicts on shared state.
 
 - Session start generates a unique ID (timestamp + PID) and creates an isolated context file
-- **Checkpoints write to per-session files only** — `state/sessions/{id}.md` + append-only daily log + unique decision files
-- Shared files (`progress.yaml`, `MEMORY.md`) are updated by merge-on-read at session start, not during checkpoints
+- **Session state** writes to per-session files (`state/sessions/{id}.md`) — concurrent agents never conflict
+- **Thread files** (progress.yaml, verification.md, conversation.md) are written directly — safe because only one agent works on a given thread at a time
+- **Append-only files** (daily log, decisions) use session prefixes or unique filenames — no conflicts
 - Other active sessions are auto-detected with a warning
 - Session cleanup on exit (PID-matched) + stale session pruning (>24h)
 
@@ -141,7 +142,7 @@ The biggest failure mode: the agent gets deep into coding and forgets to update 
 
 **Layer 2 — Pattern-match triggers in skill description.** The `/o` skill description lives in the system prompt (permanent attention, never compacted) and includes: "Proactively suggest /o checkpoint when: the user says 'done', 'looks good', or 'all set'." The agent pattern-matches on user phrases, not process rules.
 
-**Layer 3 — Structured recall template.** When `/o checkpoint` runs, the agent answers 6 categories (Code/Decisions/Research/Gotchas/Progress/Next) before passing to a subagent. This prevents vague checkpoints like "built the footer" — each category prompts specific recall.
+**Layer 3 — Structured recall template.** When `/o checkpoint` runs, the agent answers 7 categories (Code/Decisions/Research/Gotchas/Tests/Progress/Next) before passing to a subagent. This prevents vague checkpoints like "built the footer" — each category prompts specific recall.
 
 **Layer 4 — Heartbeat (safety net).** Auto-scheduled every 30 min as a backstop. Less critical now that nudge + triggers handle the common case.
 
