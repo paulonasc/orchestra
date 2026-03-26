@@ -147,8 +147,13 @@ orchestra_rules_block() {
 <!-- orchestra-rules-start -->
 ## Orchestra
 
-This repo uses Orchestra for multi-agent coordination (`/o` for status, `/o checkpoint` to save).
-Context is auto-injected at session start. The agent is nudged to checkpoint automatically.
+This repo uses Orchestra for multi-agent coordination. State lives in `.orchestra/`.
+
+- **Plans** go in `.orchestra/threads/<active-thread>/plan.md`
+- **Decisions** go in `.orchestra/decisions/NNN-slug.md`
+- **Research** goes in `.orchestra/threads/<active-thread>/research.md`
+- `/o` shows the dashboard and active thread. `/o checkpoint` saves progress.
+- When the user says "document this plan", "record this decision", or "save research" — write to the paths above, not to random directories.
 <!-- orchestra-rules-end -->
 RULESEOF
 }

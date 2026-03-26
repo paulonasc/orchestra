@@ -62,6 +62,14 @@ You just finished implementing the auth migration feature. Here is a summary of 
 
 Run /o checkpoint to save your progress now.`;
 
+export const PLAN_WRITES_TO_ORCHESTRA = `\
+I want to add a caching layer to this API. Here's what I'm thinking:
+- Use Redis for the hot path (GET /products)
+- TTL of 60 seconds, bust on write
+- Start with a simple key-value approach, no fancy invalidation
+
+Document this plan first. Write it up as a principal engineer would — options considered, tradeoffs, recommendation, implementation steps.`;
+
 export const USER_SHIPPED_SUGGESTS_CLOSE = `\
 This repo uses Orchestra for multi-agent coordination (\`/o\` for status, \`/o checkpoint\` to save).
 The active thread is 001-test-feature. All items in the thread are done.

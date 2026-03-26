@@ -8,6 +8,10 @@ description: |
   "looks good", or "all set"; a milestone is completed; before spawning
   implementation subagents; or after a long coding stretch without saving.
   Proactively suggest /o close when the user says "merged", "shipped", or "deployed".
+  When the user says "document this", "write a plan", "plan this out", or "record
+  this decision": write to .orchestra/threads/<active-thread>/plan.md for plans,
+  .orchestra/decisions/NNN-slug.md for decisions, .orchestra/threads/<active-thread>/
+  research.md for research. Run /o to find the active thread if unsure.
 ---
 
 ## Preamble (run first)
