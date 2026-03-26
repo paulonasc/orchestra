@@ -1,4 +1,35 @@
 {
+  "permissions": {
+    "allow": [
+      "mcp__nia__nia_grep",
+      "mcp__nia__nia_read",
+      "Read(//Users/paulonasc/Documents/honestclaw/honestclaw-frontend/**)",
+      "mcp__nia__manage_resource",
+      "mcp__nia__nia_explore",
+      "Read(//Users/paulonasc/Documents/honestclaw/honestclaw-api/**)",
+      "Bash(chmod +x /Users/paulonasc/Documents/orchestra/hooks/orchestra-post-tool-nudge.sh)",
+      "Bash(bash hooks/orchestra-post-tool-nudge.sh)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(bun install:*)",
+      "Bash(source .env)",
+      "Bash(bun test:*)",
+      "Bash(EVALS=1 bun test evals/cases/user-done-suggests-checkpoint.test.ts evals/cases/user-shipped-suggests-close.test.ts)",
+      "Bash(EVALS=1 bun -e ':*)",
+      "Bash(claude --version)",
+      "Bash(claude -p - --output-format stream-json --verbose --dangerously-skip-permissions --max-turns 1 --model claude-sonnet-4-6)",
+      "mcp__nia__index",
+      "mcp__nia__search",
+      "WebSearch",
+      "Bash(bun add:*)",
+      "Bash(bun -e 'import * as sdk from \"\"@anthropic-ai/claude-agent-sdk\"\"; console.log\\(\"\"Exports:\"\", Object.keys\\(sdk\\).join\\(\"\", \"\"\\)\\)')",
+      "Bash(bun -e ':*)",
+      "Bash(find node_modules/@anthropic-ai/claude-agent-sdk -name *.d.ts -o -name *.d.mts)"
+    ],
+    "additionalDirectories": [
+      "/Users/paulonasc/.orchestra/decisions",
+      "/tmp"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {

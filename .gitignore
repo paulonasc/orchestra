@@ -2,3 +2,7 @@
 *.swp
 *.swo
 .orchestra.link
+.env
+.env.*
+node_modules/
+evals/runs/

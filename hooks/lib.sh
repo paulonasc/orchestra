@@ -58,6 +58,20 @@ cleanup_stale_sessions() {
   find "$sessions_dir" -name "*.md" -mmin +1440 -delete 2>/dev/null || true
 }
 
+# Get session ID from environment or fall back to "default"
+get_session_id() {
+  echo "${ORCHESTRA_SESSION_ID:-default}"
+}
+
+# Reset the edit counter for a session
+reset_edit_count() {
+  local orch_root="$1"
+  local session_id="$2"
+  local counter_file="$orch_root/.logs/edit-count-${session_id}"
+  mkdir -p "$orch_root/.logs"
+  echo 0 > "$counter_file"
+}
+
 ensure_daily_log() {
   local orch_root="$1"
   local today="$2"
