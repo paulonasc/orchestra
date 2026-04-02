@@ -2,9 +2,9 @@
 
 **The memory layer for AI agents.**
 
-AI agents are stateless. Every session starts from zero — no memory of what was built, what was decided, what failed. You become the context bus: re-explaining architecture, repeating decisions, copy-pasting between terminals. Orchestra fixes this by giving agents a shared filesystem-based memory that persists across sessions, survives compaction, and works across multiple repos.
+AI agents are stateless. Every session starts from zero — no memory of what was built, what was decided, what failed. Orchestra fixes this with persistent, file-based memory that survives across sessions, compaction, and multiple repos.
 
-Orchestra is not a workflow engine, not a task runner, not a CLI framework. It doesn't *do* work — it *remembers* work. Workflow tools (like [gstack](https://github.com/garrytan/gstack/)) handle actions (QA, review, ship). Orchestra handles state (where are we, what happened, what's next). They're different layers — use both.
+Orchestra doesn't do work — it remembers work. Workflow tools (gstack, Cursor, etc.) handle actions. Orchestra handles state.
 
 ## How it works
 
@@ -33,15 +33,15 @@ Agents read and write these files. Hooks auto-inject context at session start. T
 
 | Problem | Without Orchestra | With Orchestra |
 |---------|------------------|----------------|
-| New session | "Here's what we did last time..." (you explain) | Agent reads state, memory, progress — knows everything |
-| Context compaction | Agent forgets mid-session decisions | Session context continuously flushed to disk, re-injected after compaction |
-| Multi-repo work | You copy-paste between terminals | Shared `.orchestra/` dir, briefings scoped per repo, handoffs between agents |
-| Concurrent sessions | Two agents stomp on each other's state | Session-scoped context files, auto-detected with warnings |
+| New session | You re-explain everything | Agent reads state, memory, progress — knows everything |
+| Context compaction | Agent forgets mid-session decisions | Session context flushed to disk, re-injected after compaction |
+| Multi-repo work | You copy-paste between terminals | Shared `.orchestra/` dir, briefings per repo, handoffs between agents |
+| Concurrent sessions | Two agents stomp each other's state | Session-scoped context files, auto-detected with warnings |
 | "Did we decide X?" | You dig through chat history | `decisions/` directory, append-only, searchable |
-| Agent forgets to update state | You say "btw update orchestra" every 30 min | Mechanical nudge after 10 edits + pattern-match triggers in skill description |
-| Frontend agent gets API noise | Shared context dumps everything | Repo-aware filtering — each agent only sees relevant memory and logs |
+| Agent forgets to update state | You remind it every 30 min | Mechanical nudge after 10 edits + pattern-match triggers |
+| Frontend agent gets API noise | Shared context dumps everything | Repo-aware filtering — each agent sees only relevant memory |
 
-## Install — 30 seconds
+## Install
 
 **Step 1:** Clone Orchestra.
 
@@ -57,26 +57,21 @@ cd ~/orchestra && ./setup install
 
 Orchestra will ask which project to coordinate, create the `.orchestra/` state directory, install hooks, and inject the `/o` skill. Done.
 
-### Manual install
+### Manual setup
 
 ```bash
 git clone https://github.com/paulonasc/orchestra.git ~/orchestra
-
-# Create .orchestra/ at your project root
 ~/orchestra/setup init ~/Projects/my-app
-
-# Link repos
 ~/orchestra/setup link ~/Projects/my-app
 ~/orchestra/setup link ~/Projects/my-api
 ```
 
-Note: Clone to `~/orchestra` not `~/.orchestra` — avoids confusion with the `.orchestra/` state directory.
-
 Each linked repo gets:
 - `.orchestra.link` — pointer to the shared `.orchestra/` directory
-- `.claude/skills/o/SKILL.md` — the `/o` command with pattern-match triggers
-- `.claude/settings.json` — lifecycle hooks (SessionStart, PreCompact, PostToolUse nudge, etc.)
-- **Awareness rules** in CLAUDE.md (3 lines between HTML comment markers — your content is never touched)
+- `.claude/skills/o/SKILL.md` — the `/o` command router (247 lines) with 8 command files in `commands/`
+- `.claude/settings.json` — lifecycle hooks (SessionStart, PreCompact, PostToolUse nudge, Stop)
+- `.claude/rules/orchestra.md` — compaction-safe routing rules
+- Orchestra rules in CLAUDE.md (between HTML comment markers — your content is never touched)
 
 ## The `/o` command
 
@@ -84,27 +79,31 @@ Each linked repo gets:
 |---------|-------------|
 | `/o` | Executive dashboard — roadmap %, risks, what needs attention |
 | `/o list` | All threads with status and progress |
+| `/o active` | What the agent thinks we're working on right now |
 | `/o <thread>` | Deep dive into a specific workstream |
 | `/o plan` | Show the plan for the active thread |
 | `/o import` | Import external docs (plans, research, specs) into a thread |
 | `/o docs` | Audit repo docs against recent changes, fix what's stale |
 | `/o checkpoint` | Flush all context to disk — compaction-proof snapshot |
 | `/o close` | Mark thread as completed |
+| `/o reopen` | Reopen a completed or abandoned thread |
 | `/o heartbeat` | Auto-audit state every 30 min |
 | `/o update` | Pull latest Orchestra and sync all repos |
+| `/o stats` | Show local usage analytics |
+| `/o release` | Bump version, generate changelog, commit + tag |
 
 ## Key concepts
 
-### Memory — two tiers
+### Memory
+
+Two tiers, both auto-injected at session start:
 
 | Tier | File | Written by | Lifespan |
 |------|------|-----------|----------|
 | Curated | `MEMORY.md` | Agent (with approval) | Permanent — architecture, conventions, gotchas |
 | Daily logs | `memory/YYYY-MM-DD.md` | Hooks (automatic) | Rolling — what happened today |
 
-Both auto-injected at session start. You never type "here's the context."
-
-### Threads — units of work
+### Threads
 
 A thread is a feature, bug, spike, or investigation. It lives in `threads/<name>/` and follows a lifecycle:
 
@@ -112,71 +111,40 @@ A thread is a feature, bug, spike, or investigation. It lives in `threads/<name>
 describe → research → plan → execute → verify → close
 ```
 
-Each thread has: spec, plan, progress (per-thread `progress.yaml` with milestones), verification, research, and conversation history. The `/o` dashboard aggregates active threads into an overall roadmap percentage. Completed and abandoned threads drop out — context stays lean.
+Each thread has: spec, plan, progress (per-thread `progress.yaml` with milestones), verification, research, and conversation history. The `/o` dashboard aggregates active threads into an overall roadmap percentage.
 
 ### Compaction survival
 
-Long sessions get compacted — Claude summarizes the conversation and drops older messages, destroying in-flight context. Orchestra solves this:
+Long sessions get compacted — Claude summarizes the conversation and drops older messages. Orchestra handles this mechanically:
 
-- PostToolUse nudge ensures checkpoints happen regularly (mechanical, not voluntary)
-- `PreCompact` hook writes a breadcrumb to the daily log + stamps the session file
-- `PreCompact` hook feeds session context into the summarizer so it's preserved
-- `PostCompact` hook re-injects context + memory + progress from disk
-- `/o checkpoint` does a full flush (session file + thread files + daily log + decisions + MEMORY.md, delegated to a background subagent)
+- **PostToolUse nudge** counts code edits per session. After 10 edits without a checkpoint, the agent gets a reminder. No voluntary compliance needed.
+- **PreCompact hook** writes a breadcrumb to the daily log and feeds session context into the summarizer so it's preserved.
+- **PostCompact hook** re-injects context + memory + progress from disk.
+- **`/o checkpoint`** does a full flush (session file, thread files, daily log, decisions, MEMORY.md) via a background subagent.
 
-No manual intervention. The nudge hook ensures state is on disk before compaction hits.
+### Concurrent sessions
 
-### Concurrent sessions — per-session write isolation
-
-Multiple agents can work on the same repo simultaneously. Each session writes to its own file only — no concurrent conflicts on shared state.
+Multiple agents can work on the same repo simultaneously. Each session writes to its own file — no conflicts on shared state.
 
 - Session start generates a unique ID (timestamp + PID) and creates an isolated context file
-- **Session state** writes to per-session files (`state/sessions/{id}.md`) — concurrent agents never conflict
-- **Thread files** (progress.yaml, verification.md, conversation.md) are written directly — safe because only one agent works on a given thread at a time
-- **Append-only files** (daily log, decisions) use session prefixes or unique filenames — no conflicts
+- Session state goes to `state/sessions/{id}.md` — concurrent agents never conflict
+- Thread files are written directly — safe because only one agent works on a given thread at a time
+- Append-only files (daily log, decisions) use session prefixes or unique filenames
 - Other active sessions are auto-detected with a warning
-- Session cleanup on exit (PID-matched) + stale session pruning (>24h)
 
-### Agent awareness — mechanical enforcement
+### Agent awareness
 
-The biggest failure mode: the agent gets deep into coding and forgets to update state. Instruction-based rules ("remember to update X after Y") don't work — agents prioritize the user's visible task over invisible bookkeeping. Orchestra prevents this mechanically:
+The biggest failure mode: the agent forgets to update state. Orchestra prevents this with five layers:
 
-**Layer 1 — PostToolUse nudge hook.** Counts code edits per session. After 10 edits without a checkpoint, the agent sees: "Orchestra: 12 edits since last checkpoint. Run /o checkpoint to save progress." Mechanical — no remembering required.
+1. **`.claude/rules/orchestra.md`** — injected into the system prompt at session start. Survives compaction. Contains mandatory routing rules (e.g., "when user says done, run `/o checkpoint` BEFORE responding").
 
-**Layer 2 — Pattern-match triggers in skill description.** The `/o` skill description lives in the system prompt (permanent attention, never compacted) and includes: "Proactively suggest /o checkpoint when: the user says 'done', 'looks good', or 'all set'." The agent pattern-matches on user phrases, not process rules.
+2. **CLAUDE.md injection** — Orchestra rules between `<!-- orchestra-rules-start -->` / `<!-- orchestra-rules-end -->` markers. Pattern-match triggers for completion signals, decisions, test results.
 
-**Layer 3 — Structured recall template.** When `/o checkpoint` runs, the agent answers 7 categories (Code/Decisions/Research/Gotchas/Tests/Progress/Next) before passing to a subagent. This prevents vague checkpoints like "built the footer" — each category prompts specific recall.
+3. **SKILL.md description** — the `/o` skill description lives in permanent system prompt attention. Includes mandatory triggers: "when user says done/looks good/all set, invoke `/o checkpoint` BEFORE responding."
 
-**Layer 4 — Heartbeat (safety net).** Auto-scheduled every 30 min as a backstop. Less critical now that nudge + triggers handle the common case.
+4. **Lifecycle hooks** — SessionStart injects context, PreCompact saves state, PostCompact restores it, Stop cleans up. Mechanical, not instruction-based.
 
-### Verification
-
-Every thread has `verification.md` — the gate between "code written" and "done." Two phases:
-
-1. **Automated** — agent runs tests, typecheck, lint, API smoke tests
-2. **Human-assisted** — agent tells you exactly what to manually test and records your results
-
-A progress item can't be marked `done` until verification passes. No unverified "100% complete" dashboards.
-
-### Briefings and handoffs
-
-**Briefings** are generated, self-contained task documents — one thread produces multiple briefings scoped per repo. Each agent gets exactly what it needs.
-
-**Handoffs** are agent-to-agent async messages. When an agent finishes work another depends on, it writes a handoff. The receiving agent picks it up at session start.
-
-### Repo-aware context filtering
-
-When `.orchestra/` is shared across repos, each agent only gets context relevant to its repo:
-
-- **MEMORY.md** — entries tagged `[repo: api]` only show when working in the API repo. Untagged entries (global) always show.
-- **Daily logs** — entries prefixed `[session: id] ... [repo: frontend]` are filtered by current repo basename.
-- **Progress** — only the active thread is shown (already scoped).
-
-This prevents the frontend agent from seeing API gotchas and vice versa. Tag your MEMORY.md entries with `[repo: name]` for filtering.
-
-### Documentation sync
-
-Agents update docs **at the moment the change happens** — not as an afterthought. Made a decision? Record it now. Hit a gotcha? Write it now. Changed an API? Update CLAUDE.md now. `/o docs` runs a full audit as a safety net, but the goal is that docs are already current.
+5. **PostToolUse nudge** — counts code edits. After 10 edits without a checkpoint: "Orchestra: 12 edits since last checkpoint. Run /o checkpoint to save progress." The agent cannot miss this — it appears in the tool response.
 
 ## Works with
 
@@ -184,52 +152,38 @@ Orchestra is agent-agnostic. It works with anything that reads files.
 
 | Agent | Integration |
 |-------|------------|
-| **Claude Code** | First-class — hooks + `/o` skill + heartbeat |
+| **Claude Code** | First-class — hooks + `/o` skill + nudge + heartbeat |
 | **Codex** | `AGENTS.md` injection + awareness rules |
 | **Cursor** | `.cursor/rules/` injection + awareness rules |
 | **OpenCode** | `.opencode/instructions.md` injection |
 | **Any agent** | Reads `.orchestra/` files directly |
 
-## Project topologies
-
-**Monorepo** — single `.orchestra/` at the repo root.
-
-**Multi-repo** — separate repos linked to a shared `.orchestra/`. Each repo gets `.orchestra.link`:
-
-```yaml
-# pied-piper-api/.orchestra.link
-root: /Users/richard/Projects/pied-piper/.orchestra
-```
-
-**Worktrees** — zero setup. A global SessionStart hook auto-links worktrees of already-linked repos on first session start. The hook detects unlinked worktrees, reads the main worktree's `.orchestra.link` to find the Orchestra install and state paths, then runs `setup link` automatically. You'll see `"Orchestra auto-linked worktree (branch-name)"` on the first session.
-
-The `.orchestra.link` file includes an `install:` field pointing to the Orchestra install directory:
-
-```yaml
-# worktree/.orchestra.link (auto-created)
-root: /Users/richard/.orchestra
-install: /Users/richard/Documents/orchestra
-```
-
-## Auto-sync and updates
-
-- Every `/o` invocation checks if the installed SKILL.md is stale — re-installs automatically
-- `/o update` pulls latest, re-links all repos, shows what's new via changelog
-- CLAUDE.md rules are safely updated between `<!-- orchestra-rules-start -->` / `<!-- orchestra-rules-end -->` markers — your content above and below is never touched
-
 ## Eval system
 
-Orchestra has an automated eval system that tests whether agents actually use it correctly. See [evals/README.md](evals/README.md) for full documentation.
+27 behavioral tests across 10 categories (router, checkpoint, routing, session, discovery, decisions, verification, regressions, identity, stats) plus 3 hook unit tests. Three tiers:
+
+1. **Hook unit tests** — bash scripts against a mock `.orchestra/`. No LLM. Sub-second.
+2. **Deterministic integration** — hook output assertions. No LLM.
+3. **Behavioral evals** — real Claude Code sessions via Agent SDK, judged by OpenAI for pass/fail.
 
 ```bash
-# Deterministic tests (fast, no API keys)
-bun test evals/
-
-# LLM behavioral evals (needs Claude auth + OPENAI_API_KEY for judge)
-EVALS=1 bun test evals/cases/
+bun test evals/              # deterministic tests (fast, no API keys)
+EVALS=1 bun test evals/cases/  # behavioral evals (needs Claude + OpenAI keys)
 ```
 
-Three tiers: hook unit tests (bash scripts), deterministic integration (hook output assertions), and LLM behavioral evals (real Claude Code sessions via Agent SDK + OpenAI judge for pass/fail).
+See [evals/README.md](evals/README.md) for full documentation.
+
+## Telemetry
+
+Opt-in, prompted on first run. Three tiers:
+
+| Tier | What's sent | Device ID |
+|------|------------|-----------|
+| **Community** | Anonymous usage data (which commands, how often) | Stable device ID for trend tracking |
+| **Anonymous** | Counters only | None |
+| **Off** | Nothing | Nothing |
+
+No code, file paths, or repo names are ever sent. Data is stored locally in `.orchestra/.logs/telemetry.jsonl` and synced to a Supabase backend when enabled. Change anytime: `orchestra-config set telemetry off`.
 
 ## License
 
