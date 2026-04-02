@@ -365,6 +365,22 @@ cmd_link() {
     "$ORCHESTRA_DIR/SKILL.md" > "$repo_path/.claude/skills/o/SKILL.md"
   echo "  Installed skill pack to .claude/skills/o/"
 
+  # Install .claude/rules/orchestra.md — survives compaction, separate from CLAUDE.md.
+  # This is the strongest persistence mechanism: Claude Code injects rules files
+  # into the system prompt at session start, even if CLAUDE.md and SKILL.md are lost.
+  # Research: https://arxiv.org/html/2602.11988v1 (passive files don't work; active injection does)
+  mkdir -p "$repo_path/.claude/rules"
+  cat > "$repo_path/.claude/rules/orchestra.md" << 'RULESEOF'
+This project uses Orchestra for coordination. State lives in .orchestra/.
+
+When asked to write a plan, write it to .orchestra/threads/<thread>/plan.md.
+Check .orchestra/state/active-thread.md for the active thread name.
+Decisions go in .orchestra/decisions/NNN-slug.md.
+Research goes in .orchestra/threads/<thread>/research.md.
+Verification goes in .orchestra/threads/<thread>/verification.md.
+RULESEOF
+  echo "  Installed .claude/rules/orchestra.md (compaction-safe routing)"
+
   # Inject Orchestra rules into agent instruction files
   inject_instruction_rules "$repo_path"
 

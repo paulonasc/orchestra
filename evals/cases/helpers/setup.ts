@@ -261,6 +261,11 @@ export function generateId(): string {
         dependencies: {
           express: '^4.18.0',
         },
+        orchestra: {
+          root: '.orchestra',
+          plans: '.orchestra/threads',
+          decisions: '.orchestra/decisions',
+        },
       },
       null,
       2,
