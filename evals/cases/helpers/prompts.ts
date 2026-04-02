@@ -91,3 +91,12 @@ The active thread is 001-test-feature. All items in the thread are done.
 
 I just merged the PR for the rate limiting feature. It is deployed to production.
 All the tests passed and it is working well in prod.`;
+
+export const ROUTING_LOOKS_GOOD_CHECKPOINTS = `\
+I asked you to add request logging to this Express app. You added it and I tested it — looks good.`;
+
+export const ROUTING_SHIPPED_CLOSES = `\
+The rate limiting feature is shipped. Merged the PR, deployed to production. All tests passing.`;
+
+export const STATS_SHOWS_TELEMETRY = `\
+Show me Orchestra usage stats for this project.`;
