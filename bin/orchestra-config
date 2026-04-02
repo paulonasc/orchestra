@@ -61,6 +61,13 @@ case "${1:-}" in
     else
       echo "${KEY}: ${VALUE}" >> "$CONFIG_FILE"
     fi
+    # Trigger immediate sync when telemetry is enabled
+    if [ "$KEY" = "telemetry" ] && [ "$VALUE" != "off" ]; then
+      _SYNC_SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/bin/orchestra-telemetry-sync"
+      if [ -x "$_SYNC_SCRIPT" ]; then
+        "$_SYNC_SCRIPT" &
+      fi
+    fi
     ;;
   list)
     cat "$CONFIG_FILE" 2>/dev/null || echo "No config file yet. Run 'orchestra-config set <key> <value>' to create one."
