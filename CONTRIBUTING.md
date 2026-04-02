@@ -144,13 +144,18 @@ The `/o` skill is the main user-facing interface. When editing:
 
 ## Pull request process
 
-All contributions go through pull requests. **Paulo ([@pnasc](https://github.com/pnasc)) reviews and approves all PRs.**
+All contributions go through pull requests. **Paulo ([@paulonasc](https://github.com/paulonasc)) reviews and approves all PRs.**
 
 ### Before opening a PR
 
-1. **Run the free tests**: `bun test evals/` — these must pass
-2. **Run behavioral evals if you changed hooks or SKILL.md**: `EVALS=1 bun test evals/cases/`
-3. **Test manually**: Use Orchestra in a real project with your changes
+**Evals are mandatory.** Do not open a PR without running them.
+
+1. **Run deterministic tests**: `bun test evals/` — these MUST pass (free, <2s)
+2. **Run behavioral evals**: `EVALS=1 bun test evals/cases/` — these MUST pass if you changed hooks, SKILL.md, or setup. Needs `.env` with `OPENAI_API_KEY` (for judge).
+3. **Include eval output** in the PR description — paste the pass/fail summary
+4. **Test manually**: Use Orchestra in a real project with your changes
+
+If an eval fails, fix the issue — don't skip the eval. If the eval itself is wrong (testing outdated behavior), update the eval in the same PR with an explanation.
 
 ### PR guidelines
 
@@ -178,16 +183,40 @@ All contributions go through pull requests. **Paulo ([@pnasc](https://github.com
 
 AI agents are welcome contributors. The same rules apply — PRs need Paulo's approval. When contributing as an agent:
 
-- Run `bun test evals/` before opening the PR
-- Include the eval output in the PR description
-- Explain your reasoning in the PR body — the reviewer needs to understand *why* you made each choice
-- Don't auto-merge — all PRs wait for human review
+- **Run all evals before opening the PR** — both `bun test evals/` AND `EVALS=1 bun test evals/cases/`
+- **If evals fail, fix the issue** — iterate on your changes until evals pass. Do not open a PR with failing evals.
+- **Include the eval output** in the PR description — paste the full pass/fail summary
+- **Explain your reasoning** in the PR body — the reviewer needs to understand *why* you made each choice
+- **Don't auto-merge** — all PRs wait for human review
 
 ## Version and changelog
 
-- Version lives in `VERSION` (currently 0.0.21)
+- Version lives in `VERSION` — single source of truth
 - Changelogs live in `changelog/` as individual markdown files per version
 - Version bumps happen at ship time, not during development
+
+### Releasing a new version
+
+**All evals must pass before releasing.** The release flow:
+
+```bash
+# 1. Run all evals (mandatory)
+bun test evals/                         # deterministic — must pass
+EVALS=1 bun test evals/cases/          # behavioral — must pass
+
+# 2. Bump version + generate changelog
+bin/orchestra-release patch             # or: minor, major, auto
+
+# 3. Push
+git push origin main --tags
+
+# 4. Distribute to linked repos
+./setup sync
+```
+
+`bin/orchestra-release` auto-detects the bump level from git log if you don't specify one (feat commits → minor, everything else → patch). It bumps VERSION, updates package.json, generates `changelog/X.Y.Z.md`, commits, and tags.
+
+Alternatively, use `/o release` inside Claude Code — it presents an AskUserQuestion with patch/minor/major options and a recommendation.
 
 ## Things to know
 
