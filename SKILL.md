@@ -1,5 +1,9 @@
 ---
 name: o
+allowed-tools:
+  - Bash
+  - Read
+  - AskUserQuestion
 description: |
   Multi-agent coordination through files. Memory, threads, progress, handoffs.
   Use when asked to "save progress", "checkpoint", "what's the status",
