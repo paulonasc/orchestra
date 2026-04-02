@@ -201,7 +201,15 @@ Orchestra is agent-agnostic. It works with anything that reads files.
 root: /Users/richard/Projects/pied-piper/.orchestra
 ```
 
-**Worktrees** — zero setup. If `.orchestra.link` is missing, Orchestra checks the main worktree for the link file automatically.
+**Worktrees** — zero setup. A global SessionStart hook auto-links worktrees of already-linked repos on first session start. The hook detects unlinked worktrees, reads the main worktree's `.orchestra.link` to find the Orchestra install and state paths, then runs `setup link` automatically. You'll see `"Orchestra auto-linked worktree (branch-name)"` on the first session.
+
+The `.orchestra.link` file includes an `install:` field pointing to the Orchestra install directory:
+
+```yaml
+# worktree/.orchestra.link (auto-created)
+root: /Users/richard/.orchestra
+install: /Users/richard/Documents/orchestra
+```
 
 ## Auto-sync and updates
 
