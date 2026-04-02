@@ -40,9 +40,64 @@ _UPD=$(__ORCHESTRA_BIN__/orchestra-update-check 2>/dev/null || true)
 
 If output shows `SKILL_SYNCED`: tell the user "Orchestra skill updated — using latest version." **Then re-read `.claude/skills/o/SKILL.md` and follow the updated instructions for the rest of this invocation.**
 
-If output shows `UPGRADE_AVAILABLE <old> <new>`: tell the user "Orchestra update available: v{old} → v{new}. Run `/o update` to upgrade." Then continue normally.
+If output shows `UPGRADE_AVAILABLE <old> <new>`: Use AskUserQuestion:
+
+> Orchestra update available: v{old} → v{new}.
+>
+> RECOMMENDATION: Choose A to stay current.
+>
+> A) Update now
+> B) Always auto-update
+> C) Not now
+> D) Never ask again
+
+If A: run `/o update`. If B: run `__ORCHESTRA_BIN__/orchestra-config set auto_upgrade true`, then `/o update`. If C: run `__ORCHESTRA_BIN__/orchestra-update-check --snooze`. If D: run `__ORCHESTRA_BIN__/orchestra-config set update_check false`.
+
+If output shows `JUST_UPGRADED <old> <new>`: tell the user "Running Orchestra v{new} (just updated!)" and continue.
 
 If no output, everything is current — continue silently.
+
+### First-run onboarding (one-time, marker-file gated)
+
+Check these markers in order. Each step only runs once. All AskUserQuestion calls must follow the format: re-ground (project + branch), simplify (plain English), recommend, lettered options.
+
+**Step 1 — Welcome** (if `~/.orchestra-state/.welcome-seen` does not exist):
+
+Tell the user: "Welcome to Orchestra — the memory layer for AI agents. Key commands: `/o` (dashboard), `/o checkpoint` (save progress), `/o close` (mark done). Orchestra remembers what happened across sessions so you don't have to re-explain."
+
+Then run: `touch ~/.orchestra-state/.welcome-seen`
+
+**Step 2 — Proactive behavior** (if `~/.orchestra-state/.proactive-prompted` does not exist AND Step 1 marker exists):
+
+Use AskUserQuestion:
+
+> Orchestra can proactively suggest checkpoints when you say "done" or "looks good", and suggest closing threads when you say "shipped" or "merged."
+>
+> RECOMMENDATION: Choose A — it prevents lost work with zero effort.
+>
+> A) Keep it on (recommended)
+> B) Turn it off — I'll manage state manually
+
+If A: run `__ORCHESTRA_BIN__/orchestra-config set proactive true`
+If B: run `__ORCHESTRA_BIN__/orchestra-config set proactive false`
+Always run: `touch ~/.orchestra-state/.proactive-prompted`
+
+**Step 3 — Heartbeat** (if `~/.orchestra-state/.heartbeat-prompted` does not exist AND Step 2 marker exists):
+
+Use AskUserQuestion:
+
+> Orchestra can auto-schedule state checks every 30 minutes to catch drift.
+>
+> RECOMMENDATION: Choose A — catches forgotten state updates automatically.
+>
+> A) Yes, auto-schedule (recommended)
+> B) No, I'll run `/o heartbeat` manually when needed
+
+If A: run `__ORCHESTRA_BIN__/orchestra-config set heartbeat_auto true`
+If B: run `__ORCHESTRA_BIN__/orchestra-config set heartbeat_auto false`
+Always run: `touch ~/.orchestra-state/.heartbeat-prompted`
+
+After onboarding completes (or if all markers exist), continue to the requested `/o` subcommand.
 
 # Orchestra
 
@@ -136,6 +191,8 @@ Store the resolved path. All paths below are relative to this `.orchestra/` root
 | `/o reopen` | `revert` | Reopen a completed or abandoned thread |
 | `/o heartbeat` | `cron` | Audit state + auto-schedule every 30 min. `/o heartbeat stop` to cancel. |
 | `/o update` | `apt upgrade` | Pull latest Orchestra and sync all repos |
+| `/o stats` | `top` | Show local usage analytics (sessions, checkpoints, nudge effectiveness) |
+| `/o release` | `npm version` | Bump version, generate changelog, commit + tag (maintainer only) |
 
 ### `/o` — Executive dashboard
 
@@ -606,11 +663,16 @@ Thread 001-instagram-integration closed as completed (2026-03-23).
 - All items in the active thread's `progress.yaml` are `done` AND all `verification.md` items are `PASS`
 - User asks to start a new thread or switches context to different work
 
-**When you detect a signal**, prompt once — don't nag:
+**When you detect a signal**, use AskUserQuestion once — don't nag:
 
-> "Looks like 001-instagram-integration is shipped. Want me to close it? (This removes it from the dashboard and session injection — you can always reopen with `/o reopen`.)"
+> {thread-name} looks complete. Closing removes it from the dashboard — you can always reopen with `/o reopen`.
+>
+> RECOMMENDATION: Choose A if all work is merged and verified.
+>
+> A) Close it — mark as completed
+> B) Not yet — still verifying
 
-If the user says yes, run the `/o close` flow. If no, drop it — don't ask again in the same session.
+If A: run the `/o close` flow. If B: drop it — don't ask again in the same session.
 
 **Rules:**
 - Only prompt for the **active thread**. Don't prompt about threads the user isn't currently working on.
@@ -672,6 +734,29 @@ If no changelog output (same version or no entries), just report: "Orchestra is 
 **Step 4 — Enable heartbeat (automatic):**
 
 After update completes, check if heartbeat is scheduled (look for `heartbeat_scheduled: true` in `state/sessions/{session-id}.md`). If not, run `/o heartbeat` to set it up. **Remember:** cron scheduling happens in the main agent (3 tool calls: CronList → CronDelete all → CronCreate with inline prompt). Never delegate cron creation to a subagent.
+
+### `/o stats` — Local usage analytics
+
+Run `__ORCHESTRA_BIN__/orchestra-stats` and present the output. Accepts optional period: `7d` (default), `30d`, `all`.
+
+Shows: sessions started/ended, checkpoints, nudge effectiveness (how often nudges lead to checkpoints), threads created/closed. All data is local (`.orchestra/.logs/telemetry.jsonl`) — nothing leaves the machine.
+
+### `/o release` — Bump version and generate changelog (maintainer only)
+
+For Orchestra maintainers shipping a new version. Use AskUserQuestion:
+
+> Ready to release. Current version: v{current}.
+>
+> RECOMMENDATION: Choose A for bug fixes and small improvements.
+>
+> A) Patch — bug fixes, small improvements (v{current} → v{patch})
+> B) Minor — new features (v{current} → v{minor})
+> C) Major — breaking changes (v{current} → v{major})
+> D) Skip — not ready to release
+
+If A/B/C: Run `__ORCHESTRA_BIN__/orchestra-release {level}`. Show the generated changelog entry. Then suggest: "Run `./setup sync` to distribute to linked repos, then `git push origin main --tags`."
+
+If D: Do nothing.
 
 ### Post-work audit
 
