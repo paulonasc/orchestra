@@ -32,6 +32,12 @@ if [ -n "$ORCH_ROOT" ]; then
   echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"session_end\"}" >> "$ORCH_ROOT/.logs/telemetry.jsonl" 2>/dev/null || true
 fi
 
+# ─── Trigger background telemetry sync ──────────────────────────
+_TEL_TIER=$("$SCRIPT_DIR/../bin/orchestra-config" get telemetry 2>/dev/null || echo "off")
+if [ "$_TEL_TIER" != "off" ] && [ -n "$_TEL_TIER" ]; then
+  "$SCRIPT_DIR/../bin/orchestra-telemetry-sync" 2>/dev/null &
+fi
+
 # Clean up session file for this process (match by PID suffix)
 if [ -d "$ORCH_ROOT/state/sessions" ]; then
   for f in "$ORCH_ROOT/state/sessions"/*-$$.md "$ORCH_ROOT/state/sessions"/*-$PPID.md; do

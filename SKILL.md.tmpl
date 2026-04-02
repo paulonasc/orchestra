@@ -945,7 +945,7 @@ After automated tests pass (or for items that can't be automated), ask the user:
 
 ### Format
 
-Read `templates/thread-verification.md` for the verification document format. Key rules:
+{{VERIFICATION_FORMAT}} Key rules:
 
 - Checklist items map 1:1 to acceptance criteria in `spec.md`
 - **Always run Phase 1 (automated) first.** Do not ask the user to manually test things you can verify yourself.
@@ -967,7 +967,7 @@ Read `templates/thread-verification.md` for the verification document format. Ke
 - "Let's not do X" — rejected approaches are decisions too
 
 1. Look at existing files in `decisions/` to find the next sequential number
-2. Create `decisions/NNN-slug.md` — read `templates/decision.md` for the format
+2. Create `decisions/NNN-slug.md` — {{DECISION_FORMAT}}
 
 Decisions are append-only. Never edit or delete existing decision files.
 
@@ -989,7 +989,7 @@ Generate briefings when the user says "let's build it", "spawn agents", "generat
 
 ### What each briefing must contain
 
-Each briefing must be fully self-contained. The receiving agent reads only this file. Read `templates/briefing.md` for the format.
+Each briefing must be fully self-contained. The receiving agent reads only this file. {{BRIEFING_FORMAT}}
 
 ## Handoffs
 
@@ -1001,7 +1001,7 @@ When you complete a significant chunk of work that another agent (or future sess
 
 ### Format
 
-Read `templates/handoff.md` for the format. Sections: What I built, What the next agent needs to know, Decisions made, Known issues.
+{{HANDOFF_FORMAT}} Sections: What I built, What the next agent needs to know, Decisions made, Known issues.
 
 Handoffs are append-only records. Never overwrite or delete them. Do not skip writing a handoff if you made changes another agent needs to know about.
 
@@ -1026,7 +1026,7 @@ completed_at:           # ISO date, set when status changes to completed/abandon
 
 ### Format
 
-YAML with milestones and items. Valid statuses: `todo`, `in_progress`, `done`, `blocked`. Blocked items must include `blocked_by` and `reason`. Each milestone has `name`, `description`. Each item has `status`, `repo`.
+{{PROGRESS_FORMAT}} Valid statuses: `todo`, `in_progress`, `done`, `blocked`. Blocked items must include `blocked_by` and `reason`. Each milestone has `name`, `description`. Each item has `status`, `repo`.
 
 ### Why per-thread?
 
@@ -1064,7 +1064,7 @@ If you see a **CONCURRENT SESSIONS** warning at session start, be aware other ag
 
 ### Format
 
-Read `templates/session.md` for the session context format. Sections: Working on, Key context, Current state, Next steps.
+{{SESSION_FORMAT}} Sections: Working on, Key context, Current state, Next steps.
 
 - **Overwrite YOUR session file each time** — this is not a log, it's a snapshot of right now
 - Keep it under 50 lines — just enough to resume without loss
@@ -1141,7 +1141,7 @@ Examples of what "now" means:
 
 ### Format
 
-Read `templates/backlog.md` for the format. Three categories: Future improvements, Tech debt, Investigate.
+{{BACKLOG_FORMAT}} Three categories: Future improvements, Tech debt, Investigate.
 
 - **One line per item** — title, brief context, thread reference, priority
 - **Keep it under 50 items.** If growing past that, items should become threads.

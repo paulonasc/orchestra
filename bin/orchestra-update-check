@@ -24,7 +24,7 @@ CACHE_FILE="$STATE_DIR/last-update-check"
 SNOOZE_FILE="$STATE_DIR/update-snoozed"
 UPGRADED_MARKER="$STATE_DIR/just-upgraded-from"
 VERSION_FILE="$ORCHESTRA_DIR/VERSION"
-REMOTE_URL="${ORCHESTRA_REMOTE_URL:-https://raw.githubusercontent.com/orchestrahq/orchestra/main/VERSION}"
+REMOTE_URL="${ORCHESTRA_REMOTE_URL:-https://raw.githubusercontent.com/paulonasc/orchestra/main/VERSION}"
 
 # Split TTL (minutes): short for up-to-date, long for upgrade-available
 TTL_UP_TO_DATE=60

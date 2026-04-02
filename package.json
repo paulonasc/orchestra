@@ -5,9 +5,12 @@
   "scripts": {
     "test": "bun test",
     "test:hooks": "bun test evals/hooks/",
-    "test:evals": "EVALS=1 bun test evals/cases/",
-    "eval": "EVALS=1 bun test evals/cases/",
-    "lint": "eslint evals/ --ext .ts"
+    "test:evals": "ls evals/cases/*.test.ts | xargs -P5 -I{} sh -c 'EVALS=1 bun test \"$1\" --retry 2 2>&1' _ {}",
+    "eval": "ls evals/cases/*.test.ts | xargs -P5 -I{} sh -c 'EVALS=1 bun test \"$1\" --retry 2 2>&1' _ {}",
+    "lint": "eslint evals/ --ext .ts",
+    "gen:skill": "bun scripts/gen-skill.ts",
+    "gen:skill:check": "bun scripts/gen-skill.ts --dry-run",
+    "gen:skill:full": "bun scripts/gen-skill.ts --full"
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.83",

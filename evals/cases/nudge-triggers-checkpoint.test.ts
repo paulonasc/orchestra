@@ -1,27 +1,31 @@
 /**
- * Case 1: PostToolUse nudge fires after 10+ edits, agent responds with /o checkpoint.
+ * Case 1: Agent responds to checkpoint nudge by invoking /o checkpoint.
  *
- * Scenario: Agent is asked to create multiple files (Express API with 3 endpoints
- * in separate files). The PostToolUse hook counts edits and nudges at threshold 10.
- * After receiving the nudge, the agent should invoke the /o skill with "checkpoint".
+ * The prompt includes a simulated nudge message ("Orchestra: 12 edits since
+ * last checkpoint. Run /o checkpoint to save progress."). The agent should
+ * respond by invoking the Skill tool with /o checkpoint.
+ *
+ * Note: We inject the nudge directly in the prompt rather than relying on
+ * the PostToolUse hook firing, because the Agent SDK may not execute Claude
+ * Code hooks from settings.json. This eval tests the agent's RESPONSE to
+ * a nudge, not whether the hook infrastructure works.
+ *
+ * @origin external — Gemini CLI issue #22261 showed agents skip bookkeeping
+ *   ~40% of the time when combined with complex coding tasks. We simplified
+ *   the coding task and inject the nudge directly.
+ *   https://github.com/google-gemini/gemini-cli/issues/22261
  */
 
 import { expect } from 'bun:test';
 import { defineEvalSuite } from './helpers/harness';
-import { seedEditCounter } from './helpers/fixtures';
 import { NUDGE_TRIGGERS_CHECKPOINT } from './helpers/prompts';
 
 defineEvalSuite('nudge-triggers-checkpoint', [
   {
-    name: 'agent calls /o checkpoint after PostToolUse nudge fires',
-    fixtures: async (env) => {
-      // Pre-seed the edit counter close to threshold so a couple of
-      // file creates push it over (avoids needing 10 actual writes).
-      await seedEditCounter(env, 8);
-    },
+    name: 'agent calls /o checkpoint after nudge message',
     session: {
       prompt: NUDGE_TRIGGERS_CHECKPOINT,
-      maxTurns: 15,
+      maxTurns: 10,
       timeout: 180_000,
     },
     assert: async (ctx) => {

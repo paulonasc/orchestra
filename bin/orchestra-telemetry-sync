@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# orchestra-telemetry-sync — upload local telemetry to remote endpoint
+# Called in background by hooks after writing events. Never blocks the user.
+set -uo pipefail  # no -e: telemetry must never exit non-zero
+
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+CONFIG_CMD="$SCRIPT_DIR/bin/orchestra-config"
+
+STATE_DIR="${ORCHESTRA_STATE_DIR:-$HOME/.orchestra-state}"
+mkdir -p "$STATE_DIR"
+
+# ─── Resolve telemetry tier ─────────────────────────────────────────
+TIER="$("$CONFIG_CMD" get telemetry 2>/dev/null || echo "off")"
+if [ -z "$TIER" ]; then TIER="off"; fi
+if [ "$TIER" = "off" ]; then exit 0; fi
+
+# ─── Resolve ORCH_ROOT (find closest .orchestra/) ───────────────────
+ORCH_ROOT=""
+_dir="$(pwd)"
+while [ "$_dir" != "/" ]; do
+  if [ -d "$_dir/.orchestra" ]; then
+    ORCH_ROOT="$_dir/.orchestra"
+    break
+  fi
+  _dir="$(dirname "$_dir")"
+done
+if [ -z "$ORCH_ROOT" ]; then exit 0; fi
+
+TELEMETRY_FILE="$ORCH_ROOT/.logs/telemetry.jsonl"
+if [ ! -f "$TELEMETRY_FILE" ]; then exit 0; fi
+
+# ─── Rate limit: 5 minutes between syncs ────────────────────────────
+LAST_SYNC_FILE="$STATE_DIR/.last-sync-time"
+if [ -f "$LAST_SYNC_FILE" ]; then
+  if command -v stat >/dev/null 2>&1; then
+    # macOS stat
+    LAST_MOD=$(stat -f %m "$LAST_SYNC_FILE" 2>/dev/null || stat -c %Y "$LAST_SYNC_FILE" 2>/dev/null || echo 0)
+    NOW=$(date +%s)
+    ELAPSED=$(( NOW - LAST_MOD ))
+    if [ "$ELAPSED" -lt 300 ]; then exit 0; fi
+  fi
+fi
+
+# ─── Cursor-based: read from last sync line ─────────────────────────
+CURSOR_FILE="$STATE_DIR/.last-sync-line"
+LAST_LINE=0
+if [ -f "$CURSOR_FILE" ]; then
+  LAST_LINE=$(cat "$CURSOR_FILE" 2>/dev/null || echo 0)
+  if ! printf '%s' "$LAST_LINE" | grep -qE '^[0-9]+$'; then LAST_LINE=0; fi
+fi
+
+TOTAL_LINES=$(wc -l < "$TELEMETRY_FILE" | tr -d ' ')
+if [ "$TOTAL_LINES" -le "$LAST_LINE" ]; then exit 0; fi
+
+# Tail unsent lines, max 50
+MAX_BATCH=50
+LINES_TO_SEND=$(( TOTAL_LINES - LAST_LINE ))
+if [ "$LINES_TO_SEND" -gt "$MAX_BATCH" ]; then
+  LINES_TO_SEND=$MAX_BATCH
+fi
+
+EVENTS=$(tail -n +"$(( LAST_LINE + 1 ))" "$TELEMETRY_FILE" | head -n "$LINES_TO_SEND")
+if [ -z "$EVENTS" ]; then exit 0; fi
+
+# ─── Installation ID for community tier ─────────────────────────────
+INSTALL_ID=""
+if [ "$TIER" = "community" ]; then
+  ID_FILE="$STATE_DIR/installation-id"
+  if [ ! -f "$ID_FILE" ]; then
+    if command -v uuidgen >/dev/null 2>&1; then
+      uuidgen | tr '[:upper:]' '[:lower:]' > "$ID_FILE"
+    else
+      od -An -tx1 -N16 /dev/urandom | tr -d ' \n' > "$ID_FILE"
+    fi
+  fi
+  INSTALL_ID="$(cat "$ID_FILE")"
+fi
+
+# ─── Build JSON array ───────────────────────────────────────────────
+# Strip fields starting with _ ; strip installation_id for anonymous tier
+JSON_ARRAY="["
+FIRST=true
+while IFS= read -r line; do
+  [ -z "$line" ] && continue
+
+  # Strip local fields (keys starting with _)
+  cleaned=$(printf '%s' "$line" | sed 's/,"_[^"]*":[^,}]*//g; s/"_[^"]*":[^,}]*,//g')
+
+  # Strip installation_id for anonymous tier
+  if [ "$TIER" = "anonymous" ]; then
+    cleaned=$(printf '%s' "$cleaned" | sed 's/,"installation_id":[^,}]*//g; s/"installation_id":[^,}]*,//g')
+  fi
+
+  # Add installation_id for community tier
+  if [ "$TIER" = "community" ] && [ -n "$INSTALL_ID" ]; then
+    # Inject installation_id into each event
+    cleaned=$(printf '%s' "$cleaned" | sed "s/^{/{\"installation_id\":\"${INSTALL_ID}\",/")
+  fi
+
+  if [ "$FIRST" = true ]; then
+    JSON_ARRAY="${JSON_ARRAY}${cleaned}"
+    FIRST=false
+  else
+    JSON_ARRAY="${JSON_ARRAY},${cleaned}"
+  fi
+done <<< "$EVENTS"
+JSON_ARRAY="${JSON_ARRAY}]"
+
+# ─── Resolve endpoint URL ───────────────────────────────────────────
+ENDPOINT="${ORCHESTRA_TELEMETRY_URL:-}"
+if [ -z "$ENDPOINT" ]; then
+  ENDPOINT="$("$CONFIG_CMD" get telemetry_url 2>/dev/null || echo "")"
+fi
+if [ -z "$ENDPOINT" ]; then
+  ENDPOINT="https://orchestra-telemetry.fly.dev"
+fi
+
+# ─── POST events ────────────────────────────────────────────────────
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+  --max-time 10 \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d "$JSON_ARRAY" \
+  "${ENDPOINT}/api/telemetry" 2>/dev/null || echo "000")
+
+# ─── Advance cursor only on success ─────────────────────────────────
+if [ "$HTTP_CODE" -ge 200 ] 2>/dev/null && [ "$HTTP_CODE" -lt 300 ] 2>/dev/null; then
+  echo "$(( LAST_LINE + LINES_TO_SEND ))" > "$CURSOR_FILE"
+  touch "$LAST_SYNC_FILE"
+fi
+
+exit 0

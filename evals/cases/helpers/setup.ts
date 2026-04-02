@@ -50,6 +50,43 @@ export async function createTestWorkDir(name: string): Promise<TestWorkDir> {
     await mkdir(dir, { recursive: true });
   }
 
+  // Discovery README.md — helps agents find .orchestra/ without external context
+  await writeFile(
+    join(orchestra, 'README.md'),
+    `# .orchestra/ — Multi-agent coordination state
+
+This directory is managed by [Orchestra](https://github.com/paulonasc/orchestra).
+
+## For AI agents
+
+If you find this directory, you should use it for coordination state:
+- **Plans** go in \`threads/<active-thread>/plan.md\`
+- **Decisions** go in \`decisions/NNN-slug.md\`
+- **Research** goes in \`threads/<active-thread>/research.md\`
+- **Verification** results go in \`threads/<active-thread>/verification.md\`
+- Check \`state/active-thread.md\` to find the current active thread.
+
+## Structure
+
+\`\`\`
+.orchestra/
+├── MEMORY.md           # permanent project memory
+├── state/
+│   └── active-thread.md  # current thread name
+├── threads/            # per-thread workspaces
+│   └── NNN-slug/
+│       ├── plan.md
+│       ├── spec.md
+│       ├── progress.yaml
+│       └── verification.md
+├── decisions/          # architectural decision records
+└── memory/             # daily logs
+\`\`\`
+
+Run \`/o\` in Claude Code for the full dashboard.
+`,
+  );
+
   // .orchestra.link so hooks can find the root
   await writeFile(join(root, '.orchestra.link'), `root: ${orchestra}\n`);
 
@@ -164,7 +201,7 @@ export async function createTestWorkDir(name: string): Promise<TestWorkDir> {
     JSON.stringify(settings, null, 2),
   );
 
-  // CLAUDE.md with Orchestra rules (must match setup's orchestra_rules_block())
+  // CLAUDE.md with Orchestra routing rules (must match setup's orchestra_rules_block())
   await writeFile(
     join(root, 'CLAUDE.md'),
     `# Project Rules
@@ -173,13 +210,33 @@ export async function createTestWorkDir(name: string): Promise<TestWorkDir> {
 
 This repo uses Orchestra for multi-agent coordination. State lives in \`.orchestra/\`.
 
-- **Plans** go in \`.orchestra/threads/<active-thread>/plan.md\`
-- **Decisions** go in \`.orchestra/decisions/NNN-slug.md\`
-- **Research** goes in \`.orchestra/threads/<active-thread>/research.md\`
-- **Verification** results go in \`.orchestra/threads/<active-thread>/verification.md\`
-- \`/o\` shows the dashboard and active thread. \`/o checkpoint\` saves progress.
-- When the user says "document this plan", "record this decision", or "save research" — write to the paths above, not to random directories.
-- When tests pass or the user reports test results — update verification.md with PASS/FAIL, then suggest \`/o checkpoint\`.
+When the user's request matches a pattern below, ALWAYS act on it BEFORE responding directly:
+
+- User says "done", "looks good", "that's working", "all set", "that's all", "nice work" → run \`/o checkpoint\` BEFORE responding
+- User says "merged", "shipped", "deployed" → run \`/o close\`
+- User says "plan this", "write a plan", "document the plan" → write to \`.orchestra/threads/<active-thread>/plan.md\`
+- User says "record this decision", "we decided", "let's go with" → write to \`.orchestra/decisions/NNN-slug.md\`
+- User mentions test results ("tests passed", "0 failures", "build clean") → update verification.md FIRST, then respond
+- User says "what's the status", "where are we" → run \`/o\`
+
+**Do NOT skip Orchestra writes to answer the user faster.** The write takes 5 seconds. Losing state costs 20 minutes next session.
+`,
+  );
+
+  // .claude/rules/orchestra.md — strongest persistence layer (survives compaction)
+  const rulesDir = join(root, '.claude', 'rules');
+  await mkdir(rulesDir, { recursive: true });
+  await writeFile(
+    join(rulesDir, 'orchestra.md'),
+    `This project uses Orchestra for coordination. State lives in .orchestra/.
+
+MANDATORY: When the user signals completion ("done", "looks good", "that's working",
+"all set", "that's all", "nice work"), invoke /o checkpoint BEFORE responding.
+This is your LAST tool call before any text response. State is lost if you skip this.
+
+Plans go in .orchestra/threads/<thread>/plan.md.
+Check .orchestra/state/active-thread.md for the active thread name.
+Decisions go in .orchestra/decisions/NNN-slug.md.
 `,
   );
 
@@ -224,6 +281,11 @@ export function generateId(): string {
         dependencies: {
           express: '^4.18.0',
         },
+        orchestra: {
+          root: '.orchestra',
+          plans: '.orchestra/threads',
+          decisions: '.orchestra/decisions',
+        },
       },
       null,
       2,
@@ -246,6 +308,18 @@ export function generateId(): string {
       null,
       2,
     ),
+  );
+
+  // .gitignore — the descriptive comment acts as a breadcrumb for agents
+  // that explore the repo without CLAUDE.md or SKILL.md context.
+  await writeFile(
+    join(root, '.gitignore'),
+    `.orchestra.link
+# Orchestra — multi-agent coordination (plans, decisions, research go here)
+.orchestra/
+node_modules/
+dist/
+`,
   );
 
   // git init + initial commit

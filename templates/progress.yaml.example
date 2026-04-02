@@ -1,0 +1,33 @@
+status: active          # active | completed | abandoned
+completed_at:           # ISO date, set when status changes to completed/abandoned
+
+milestones:
+  - id: M0
+    name: Scaffolding & CI/CD
+    description: Project setup, repo structure, CI/CD pipelines
+    items:
+      - name: Initialize repo structure
+        status: done        # todo | in_progress | done | blocked
+        repo: api
+      - name: Set up CI/CD pipeline
+        status: in_progress
+        repo: api
+      - name: Configure linting and formatting
+        status: todo
+        repo: api
+      - name: Blocked example item
+        status: blocked
+        repo: infra
+        blocked_by: "AWS credentials"
+        reason: "Need production AWS access to configure Terraform backend"
+
+  - id: M1
+    name: Core Features
+    description: Primary feature implementation
+    items:
+      - name: Implement auth flow
+        status: todo
+        repo: api
+      - name: Build user dashboard
+        status: todo
+        repo: frontend

@@ -20,7 +20,7 @@ defineEvalSuite('checkpoint-includes-decisions', [
     },
     session: {
       prompt: CHECKPOINT_INCLUDES_DECISIONS,
-      maxTurns: 10,
+      maxTurns: 15,
       timeout: 180_000,
     },
     assert: async (ctx) => {

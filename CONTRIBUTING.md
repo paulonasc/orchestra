@@ -106,7 +106,63 @@ EVALS=1 bun test evals/cases/
 1. Create `evals/cases/your-behavior.test.ts`
 2. Use the session runner from `evals/helpers/session-runner.ts`
 3. Use the judge from `evals/helpers/judge.ts` for pass/fail
-4. Test it: `EVALS=1 bun test evals/cases/your-behavior.test.ts`
+4. **Add provenance to the JSDoc header** (see format below)
+5. Test it: `EVALS=1 bun test evals/cases/your-behavior.test.ts`
+
+### Eval provenance (required)
+
+Every eval must document WHERE it came from in its JSDoc header. This tells future maintainers why the test exists and whether the scenario is theoretical or battle-tested.
+
+Use the `@origin` tag with one of these types:
+
+```typescript
+/**
+ * Case N: What this eval tests.
+ *
+ * @origin real-user — Paulo hit this during a long coding session where
+ *   the agent forgot to checkpoint after saying "looks good"
+ *
+ * @origin regression — v0.0.20 broke checkpoint thread file writes,
+ *   this eval catches the specific failure pattern
+ *
+ * @origin research — ETH Zurich "Evaluating AGENTS.md" (Feb 2026)
+ *   showed passive breadcrumbs don't change agent behavior
+ *   https://arxiv.org/html/2602.11988v1
+ *
+ * @origin synthetic — hypothetical scenario testing whether the agent
+ *   discovers .orchestra/ with zero prompt context
+ *
+ * @origin external — Gemini CLI issue #22261 documented that agents
+ *   skip bookkeeping 40% of the time with complex coding tasks
+ *   https://github.com/google-gemini/gemini-cli/issues/22261
+ */
+```
+
+Origin types:
+
+| Type | When to use |
+|------|-------------|
+| `real-user` | A real person experienced this failure. Include who and when. |
+| `regression` | A code change broke something. Include which version/commit. |
+| `research` | Based on published research or study. Include URL. |
+| `synthetic` | Hypothetical scenario, not yet observed in the wild. |
+| `external` | Observed in another tool/project. Include source URL. |
+
+This takes 1 line to add but makes a huge difference when deciding whether to keep, modify, or delete an eval during refactors.
+
+### Eval integrity — do NOT weaken tests to make them pass
+
+**Evals exist to push the system forward.** The fact that a test is hard is exactly why it exists. When an eval fails, the correct response is to improve the system (prompts, SKILL.md, hooks, architecture) — not to simplify the test.
+
+Rules:
+- **Never simplify an eval prompt** to make it pass unless the original prompt was testing the wrong thing
+- **Never change assertions** to accept weaker behavior unless the original assertion was incorrect
+- **Hard variants (`*-hard.test.ts`) must NEVER be modified to pass.** They represent the realistic scenario. Improve the system until they pass.
+- **Baseline variants** test the minimum behavior and should always pass. These gate releases.
+- When a hard test fails, treat it as a signal: "our system isn't good enough yet for this case"
+- Document WHY you changed an eval if you ever modify one — in the commit message AND the JSDoc
+
+The goal is to **hill-climb**: make the system better until hard evals pass, not make evals easier until they pass on a weak system.
 
 ## Working on hooks
 
