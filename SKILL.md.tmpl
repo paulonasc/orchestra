@@ -549,13 +549,18 @@ Force-flush all in-flight context to Orchestra files. Use before stepping away, 
 
 Write down your answers — they become the subagent prompt (or your own writing guide if doing it inline). Be thorough — this is what survives compaction.
 
-**Files to write (all paths relative to `.orchestra/`):**
+**Files to write (all paths relative to `.orchestra/`), in priority order:**
 
-1. **`state/sessions/{session-id}.md`** — session state snapshot. Fill in every section: Working on, Progress updates, Decisions made, Research findings, Gotchas, Next steps.
-2. **`threads/NNN-slug/progress.yaml`** — update item statuses to reflect reality. Mark completed items as `done`, new work as `in-progress`.
-3. **`threads/NNN-slug/verification.md`** — record any test results from this session. Update PENDING items to PASS/FAIL with details.
-4. **`threads/NNN-slug/conversation.md`** — append design decisions or important discussion from this session.
-5. **`memory/YYYY-MM-DD.md`** — append-only daily log. Prefix each entry with `[session: {session-id}]` so concurrent sessions don't interleave ambiguously.
+Write these two FIRST — they are the minimum viable checkpoint. If you are low on turns, write only these two and skip the rest:
+
+1. **`state/sessions/{session-id}.md`** (CRITICAL) — session state snapshot. Fill in every section: Working on, Progress updates, Decisions made, Research findings, Gotchas, Next steps. This is the single most important file — without it, the session is lost on compaction.
+2. **`memory/YYYY-MM-DD.md`** (CRITICAL) — append-only daily log. Prefix each entry with `[session: {session-id}]` so concurrent sessions don't interleave ambiguously.
+
+Then write these if turns/context allow:
+
+3. **`threads/NNN-slug/progress.yaml`** — update item statuses to reflect reality. Mark completed items as `done`, new work as `in-progress`.
+4. **`threads/NNN-slug/verification.md`** — record any test results from this session. Update PENDING items to PASS/FAIL with details.
+5. **`threads/NNN-slug/conversation.md`** — append design decisions or important discussion from this session.
 6. **`decisions/NNN-slug.md`** — new decision files for any decisions made this session. Use unique filenames (next available number + descriptive slug) so concurrent agents never collide.
 7. **`MEMORY.md`** — durable learnings (gotchas, patterns, preferences). Append new entries; never overwrite existing ones.
 

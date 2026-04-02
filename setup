@@ -340,11 +340,16 @@ cmd_link() {
       echo "  Added .orchestra.link to .gitignore"
     fi
     if ! grep -qxF '.orchestra/' "$repo_path/.gitignore"; then
+      echo '# Orchestra — multi-agent coordination (plans, decisions, research go here)' >> "$repo_path/.gitignore"
       echo '.orchestra/' >> "$repo_path/.gitignore"
       echo "  Added .orchestra/ to .gitignore"
+    elif ! grep -q 'Orchestra.*coordination' "$repo_path/.gitignore"; then
+      # Existing .orchestra/ entry but no descriptive comment — add one
+      sed -i '' 's|^\.orchestra/$|# Orchestra — multi-agent coordination (plans, decisions, research go here)\n.orchestra/|' "$repo_path/.gitignore"
+      echo "  Added Orchestra description comment to .gitignore"
     fi
   else
-    printf '.orchestra.link\n.orchestra/\n' > "$repo_path/.gitignore"
+    printf '.orchestra.link\n# Orchestra — multi-agent coordination (plans, decisions, research go here)\n.orchestra/\n' > "$repo_path/.gitignore"
     echo "  Created .gitignore with .orchestra.link and .orchestra/"
   fi
 

@@ -285,6 +285,18 @@ export function generateId(): string {
     ),
   );
 
+  // .gitignore — the descriptive comment acts as a breadcrumb for agents
+  // that explore the repo without CLAUDE.md or SKILL.md context.
+  await writeFile(
+    join(root, '.gitignore'),
+    `.orchestra.link
+# Orchestra — multi-agent coordination (plans, decisions, research go here)
+.orchestra/
+node_modules/
+dist/
+`,
+  );
+
   // git init + initial commit
   const exec = Bun.spawnSync;
   exec(['git', 'init'], { cwd: root });
