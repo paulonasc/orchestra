@@ -391,6 +391,9 @@ cmd_link() {
   install_hooks "$repo_path"
 
   # Copy skill pack into repo's .claude/skills/o/
+  # Delete and recreate commands/ and reference/ to remove orphaned files from old versions.
+  # These are Orchestra-managed files — user customizations should be in the source repo, not here.
+  rm -rf "$repo_path/.claude/skills/o/commands" "$repo_path/.claude/skills/o/reference"
   mkdir -p "$repo_path/.claude/skills/o/commands"
   mkdir -p "$repo_path/.claude/skills/o/reference"
   # Router SKILL.md (with path substitution)
