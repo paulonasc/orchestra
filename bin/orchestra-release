@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+VERSION_FILE="$SCRIPT_DIR/VERSION"
+PACKAGE_JSON="$SCRIPT_DIR/package.json"
+CHANGELOG_DIR="$SCRIPT_DIR/changelog"
+
+# Read current version
+OLD_VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
+if [ -z "$OLD_VERSION" ]; then
+  echo -e "${RED}Error: VERSION file is empty${RESET}" >&2
+  exit 1
+fi
+
+# Parse version parts (supports X.Y.Z format)
+IFS='.' read -r MAJOR MINOR PATCH <<< "$OLD_VERSION"
+
+# Determine bump level
+LEVEL="${1:-auto}"
+
+if [ "$LEVEL" = "auto" ]; then
+  # Auto-decide from git log since last tag
+  LAST_TAG="$(git -C "$SCRIPT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "")"
+  if [ -n "$LAST_TAG" ]; then
+    LOG="$(git -C "$SCRIPT_DIR" log "$LAST_TAG..HEAD" --oneline 2>/dev/null || true)"
+  else
+    LOG="$(git -C "$SCRIPT_DIR" log --oneline -20 2>/dev/null || true)"
+  fi
+
+  if echo "$LOG" | grep -qiE '^[a-f0-9]+ (feat|add|new)'; then
+    LEVEL="minor"
+  else
+    LEVEL="patch"
+  fi
+  echo -e "${YELLOW}Auto-detected: ${BOLD}$LEVEL${RESET}"
+fi
+
+# Bump version
+case "$LEVEL" in
+  patch) PATCH=$((PATCH + 1)) ;;
+  minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+  major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+  *) echo -e "${RED}Usage: orchestra-release [patch|minor|major]${RESET}" >&2; exit 1 ;;
+esac
+
+NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+echo -e "Version: ${BOLD}$OLD_VERSION${RESET} → ${GREEN}${BOLD}$NEW_VERSION${RESET}"
+
+# Update VERSION file
+echo "$NEW_VERSION" > "$VERSION_FILE"
+
+# Update package.json version (use sed for portability — no jq dependency)
+if [ -f "$PACKAGE_JSON" ]; then
+  _tmpfile="$(mktemp)"
+  sed "s/\"version\": \"[^\"]*\"/\"version\": \"$NEW_VERSION\"/" "$PACKAGE_JSON" > "$_tmpfile" && mv "$_tmpfile" "$PACKAGE_JSON"
+  echo "  Updated package.json"
+fi
+
+# Generate changelog entry
+mkdir -p "$CHANGELOG_DIR"
+CHANGELOG_FILE="$CHANGELOG_DIR/$NEW_VERSION.md"
+
+LAST_TAG="$(git -C "$SCRIPT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "")"
+if [ -n "$LAST_TAG" ]; then
+  GIT_LOG="$(git -C "$SCRIPT_DIR" log "$LAST_TAG..HEAD" --pretty=format:"- %s" 2>/dev/null || true)"
+else
+  GIT_LOG="$(git -C "$SCRIPT_DIR" log --oneline -20 --pretty=format:"- %s" 2>/dev/null || true)"
+fi
+
+# Group commits by type
+ADDED="$(echo "$GIT_LOG" | grep -iE '^\- (feat|add|new)' || true)"
+CHANGED="$(echo "$GIT_LOG" | grep -iE '^\- (update|change|improve|refactor)' || true)"
+FIXED="$(echo "$GIT_LOG" | grep -iE '^\- (fix|bug|patch|correct)' || true)"
+OTHER="$(echo "$GIT_LOG" | grep -viE '^\- (feat|add|new|update|change|improve|refactor|fix|bug|patch|correct)' || true)"
+
+{
+  echo "# Orchestra $NEW_VERSION"
+  echo ""
+  echo "**Released:** $(date +%Y-%m-%d)"
+  echo ""
+  if [ -n "$ADDED" ]; then
+    echo "## Added"
+    echo "$ADDED"
+    echo ""
+  fi
+  if [ -n "$CHANGED" ]; then
+    echo "## Changed"
+    echo "$CHANGED"
+    echo ""
+  fi
+  if [ -n "$FIXED" ]; then
+    echo "## Fixed"
+    echo "$FIXED"
+    echo ""
+  fi
+  if [ -n "$OTHER" ]; then
+    echo "## Other"
+    echo "$OTHER"
+    echo ""
+  fi
+  echo "## Actions"
+  echo ""
+  echo "Re-link repos to get the latest hooks and rules:"
+  echo '```bash'
+  echo './setup sync'
+  echo '```'
+} > "$CHANGELOG_FILE"
+
+echo "  Generated $CHANGELOG_FILE"
+
+# Commit and tag
+git -C "$SCRIPT_DIR" add "$VERSION_FILE" "$PACKAGE_JSON" "$CHANGELOG_DIR/"
+git -C "$SCRIPT_DIR" commit -m "release: v$NEW_VERSION"
+git -C "$SCRIPT_DIR" tag "v$NEW_VERSION"
+
+echo ""
+echo -e "${GREEN}${BOLD}Released v$NEW_VERSION${RESET}"
+echo ""
+echo "Next steps:"
+echo "  git push origin main --tags"
+echo "  ./setup sync  # update linked repos"

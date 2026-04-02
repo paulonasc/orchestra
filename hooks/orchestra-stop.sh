@@ -27,6 +27,11 @@ WORKTREE_NAME="$(basename "$(pwd)")"
 echo "" >> "$ORCH_ROOT/memory/$TODAY.md"
 echo "## $TIME — Session ended ($WORKTREE_NAME)" >> "$ORCH_ROOT/memory/$TODAY.md"
 
+# ─── Telemetry: session end ──────────────────────────────────
+if [ -n "$ORCH_ROOT" ]; then
+  echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"session_end\"}" >> "$ORCH_ROOT/.logs/telemetry.jsonl" 2>/dev/null || true
+fi
+
 # Clean up session file for this process (match by PID suffix)
 if [ -d "$ORCH_ROOT/state/sessions" ]; then
   for f in "$ORCH_ROOT/state/sessions"/*-$$.md "$ORCH_ROOT/state/sessions"/*-$PPID.md; do

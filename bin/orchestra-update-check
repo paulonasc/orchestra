@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
-# orchestra-update-check — periodic version check.
+# orchestra-update-check — periodic version check with split TTL caching,
+# escalating snooze, and just-upgraded detection.
 #
 # Output (one line, or nothing):
-#   UPGRADE_AVAILABLE <local> <remote>  — remote VERSION differs from local
-#   (nothing)                           — up to date or check skipped
+#   JUST_UPGRADED <old> <new>             — user just upgraded
+#   UPGRADE_AVAILABLE <local> <remote>    — remote VERSION differs from local
+#   (nothing)                             — up to date, snoozed, disabled, or check skipped
+#
+# Flags:
+#   --force    bust cache and snooze (used by `/o update`)
+#   --snooze   bump the snooze level for the current remote version
 #
 # Env overrides (for testing):
 #   ORCHESTRA_INSTALL_DIR   — override auto-detected orchestra root
@@ -11,49 +17,153 @@
 #   ORCHESTRA_STATE_DIR     — override ~/.orchestra-state directory
 set -euo pipefail
 
+# ─── Paths & defaults ───────────────────────────────────────────
 ORCHESTRA_DIR="${ORCHESTRA_INSTALL_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 STATE_DIR="${ORCHESTRA_STATE_DIR:-$HOME/.orchestra-state}"
 CACHE_FILE="$STATE_DIR/last-update-check"
+SNOOZE_FILE="$STATE_DIR/update-snoozed"
+UPGRADED_MARKER="$STATE_DIR/just-upgraded-from"
 VERSION_FILE="$ORCHESTRA_DIR/VERSION"
 REMOTE_URL="${ORCHESTRA_REMOTE_URL:-https://raw.githubusercontent.com/orchestrahq/orchestra/main/VERSION}"
 
-# How often to check (seconds). Default: 6 hours.
-CHECK_INTERVAL="${ORCHESTRA_CHECK_INTERVAL:-21600}"
+# Split TTL (minutes): short for up-to-date, long for upgrade-available
+TTL_UP_TO_DATE=60
+TTL_UPGRADE_AVAILABLE=720
 
-# ─── Read local version ──────────────────────────────────────
+# ─── Parse flags ─────────────────────────────────────────────────
+FORCE=false
+SNOOZE=false
+for arg in "$@"; do
+  case "$arg" in
+    --force)  FORCE=true ;;
+    --snooze) SNOOZE=true ;;
+  esac
+done
+
+# ─── Config gate ─────────────────────────────────────────────────
+if [ "$FORCE" = false ]; then
+  disabled="$("$ORCHESTRA_DIR/bin/orchestra-config" get update_check 2>/dev/null || true)"
+  if [ -z "$disabled" ]; then
+    config_file="$HOME/.orchestra-state/config.yaml"
+    if [ -f "$config_file" ] && grep -qE '^update_check:\s*false' "$config_file" 2>/dev/null; then
+      disabled="false"
+    fi
+  fi
+  if [ "$disabled" = "false" ]; then
+    exit 0
+  fi
+fi
+
+# ─── Read local version ─────────────────────────────────────────
 if [ ! -f "$VERSION_FILE" ]; then
   exit 0  # no VERSION file = dev install, skip check
 fi
 LOCAL="$(tr -d '[:space:]' < "$VERSION_FILE")"
 
-# ─── Check cache first (avoid hammering GitHub) ──────────────
 mkdir -p "$STATE_DIR"
 
-if [ -f "$CACHE_FILE" ]; then
-  CACHE_AGE=0
-  if stat -f %m "$CACHE_FILE" >/dev/null 2>&1; then
-    # macOS
-    CACHE_EPOCH=$(stat -f %m "$CACHE_FILE")
-  elif stat -c %Y "$CACHE_FILE" >/dev/null 2>&1; then
-    # Linux
-    CACHE_EPOCH=$(stat -c %Y "$CACHE_FILE")
-  else
-    CACHE_EPOCH=0
-  fi
-  NOW=$(date +%s)
-  CACHE_AGE=$((NOW - CACHE_EPOCH))
+# ─── Handle --snooze ─────────────────────────────────────────────
+if [ "$SNOOZE" = true ] && [ -f "$CACHE_FILE" ]; then
+  cached="$(cat "$CACHE_FILE")"
+  case "$cached" in
+    UPGRADE_AVAILABLE*)
+      remote_ver="${cached##* }"
+      level=1
+      if [ -f "$SNOOZE_FILE" ]; then
+        snooze_ver="$(awk '{print $1}' "$SNOOZE_FILE")"
+        if [ "$snooze_ver" = "$remote_ver" ]; then
+          level=$(( $(awk '{print $2}' "$SNOOZE_FILE") + 1 ))
+        fi
+      fi
+      echo "$remote_ver $level $(date +%s)" > "$SNOOZE_FILE"
+      ;;
+  esac
+  exit 0
+fi
 
-  if [ "$CACHE_AGE" -lt "$CHECK_INTERVAL" ]; then
-    # Cache is fresh — replay cached result
-    CACHED="$(cat "$CACHE_FILE")"
-    case "$CACHED" in
-      UPGRADE_AVAILABLE*) echo "$CACHED" ;;
-    esac
-    exit 0
+# ─── Just-upgraded marker ────────────────────────────────────────
+if [ -f "$UPGRADED_MARKER" ]; then
+  old_ver="$(tr -d '[:space:]' < "$UPGRADED_MARKER")"
+  rm -f "$UPGRADED_MARKER" "$SNOOZE_FILE"
+  if [ -n "$old_ver" ] && [ "$old_ver" != "$LOCAL" ]; then
+    echo "JUST_UPGRADED $old_ver $LOCAL"
+  fi
+  # Fall through to also check remote
+fi
+
+# ─── Force: bust cache and snooze ────────────────────────────────
+if [ "$FORCE" = true ]; then
+  rm -f "$CACHE_FILE" "$SNOOZE_FILE"
+fi
+
+# ─── Snooze check ────────────────────────────────────────────────
+check_snooze() {
+  [ -f "$SNOOZE_FILE" ] || return 1
+
+  local snooze_ver snooze_level snooze_epoch
+  snooze_ver="$(awk '{print $1}' "$SNOOZE_FILE")"
+  snooze_level="$(awk '{print $2}' "$SNOOZE_FILE")"
+  snooze_epoch="$(awk '{print $3}' "$SNOOZE_FILE")"
+
+  # New version resets snooze
+  if [ "$snooze_ver" != "$1" ]; then
+    rm -f "$SNOOZE_FILE"
+    return 1
+  fi
+
+  # Escalating duration: L1=24h, L2=48h, L3+=7d
+  local duration_sec
+  case "$snooze_level" in
+    1) duration_sec=86400 ;;
+    2) duration_sec=172800 ;;
+    *) duration_sec=604800 ;;
+  esac
+
+  local now elapsed
+  now="$(date +%s)"
+  elapsed=$(( now - snooze_epoch ))
+  [ "$elapsed" -lt "$duration_sec" ]
+}
+
+# ─── Check cache (split TTL, portable find-based staleness) ──────
+if [ "$FORCE" = false ] && [ -f "$CACHE_FILE" ]; then
+  cached="$(cat "$CACHE_FILE")"
+  cached_status="${cached%% *}"
+  cached_local=""
+
+  case "$cached" in
+    UP_TO_DATE*)    cached_local="$(echo "$cached" | awk '{print $2}')" ;;
+    UPGRADE_AVAILABLE*) cached_local="$(echo "$cached" | awk '{print $2}')" ;;
+  esac
+
+  # Cache invalidation: if local version changed, force re-fetch
+  if [ -n "$cached_local" ] && [ "$cached_local" != "$LOCAL" ]; then
+    rm -f "$CACHE_FILE"
+  else
+    # Pick TTL based on cached status
+    ttl="$TTL_UP_TO_DATE"
+    if [ "$cached_status" = "UPGRADE_AVAILABLE" ]; then
+      ttl="$TTL_UPGRADE_AVAILABLE"
+    fi
+
+    # find returns the file if it's OLDER than +N minutes (i.e. stale)
+    if [ -z "$(find "$CACHE_FILE" -mmin +"$ttl" 2>/dev/null)" ]; then
+      # Cache is fresh — replay cached result
+      case "$cached" in
+        UPGRADE_AVAILABLE*)
+          remote_ver="$(echo "$cached" | awk '{print $3}')"
+          if check_snooze "$remote_ver"; then
+            exit 0  # snoozed
+          fi
+          echo "$cached"
+          ;;
+      esac
+      exit 0
+    fi
   fi
 fi
 
-# ─── Fetch remote version ────────────────────────────────────
+# ─── Fetch remote version ───────────────────────────────────────
 REMOTE="$(curl -sf --max-time 5 "$REMOTE_URL" 2>/dev/null || true)"
 REMOTE="$(echo "$REMOTE" | tr -d '[:space:]')"
 
@@ -68,6 +178,11 @@ if [ "$LOCAL" = "$REMOTE" ]; then
   exit 0
 fi
 
-# Versions differ
+# ─── Upgrade available ──────────────────────────────────────────
 echo "UPGRADE_AVAILABLE $LOCAL $REMOTE" > "$CACHE_FILE"
+
+if check_snooze "$REMOTE"; then
+  exit 0  # snoozed
+fi
+
 echo "UPGRADE_AVAILABLE $LOCAL $REMOTE"

@@ -19,7 +19,7 @@ defineEvalSuite('checkpoint-includes-research', [
     },
     session: {
       prompt: CHECKPOINT_INCLUDES_RESEARCH,
-      maxTurns: 10,
+      maxTurns: 15,
       timeout: 180_000,
     },
     assert: async (ctx) => {

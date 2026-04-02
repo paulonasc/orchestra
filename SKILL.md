@@ -1,5 +1,9 @@
 ---
 name: o
+allowed-tools:
+  - Bash
+  - Read
+  - AskUserQuestion
 description: |
   Multi-agent coordination through files. Memory, threads, progress, handoffs.
   Use when asked to "save progress", "checkpoint", "what's the status",
@@ -36,9 +40,64 @@ _UPD=$(__ORCHESTRA_BIN__/orchestra-update-check 2>/dev/null || true)
 
 If output shows `SKILL_SYNCED`: tell the user "Orchestra skill updated — using latest version." **Then re-read `.claude/skills/o/SKILL.md` and follow the updated instructions for the rest of this invocation.**
 
-If output shows `UPGRADE_AVAILABLE <old> <new>`: tell the user "Orchestra update available: v{old} → v{new}. Run `/o update` to upgrade." Then continue normally.
+If output shows `UPGRADE_AVAILABLE <old> <new>`: Use AskUserQuestion:
+
+> Orchestra update available: v{old} → v{new}.
+>
+> RECOMMENDATION: Choose A to stay current.
+>
+> A) Update now
+> B) Always auto-update
+> C) Not now
+> D) Never ask again
+
+If A: run `/o update`. If B: run `__ORCHESTRA_BIN__/orchestra-config set auto_upgrade true`, then `/o update`. If C: run `__ORCHESTRA_BIN__/orchestra-update-check --snooze`. If D: run `__ORCHESTRA_BIN__/orchestra-config set update_check false`.
+
+If output shows `JUST_UPGRADED <old> <new>`: tell the user "Running Orchestra v{new} (just updated!)" and continue.
 
 If no output, everything is current — continue silently.
+
+### First-run onboarding (one-time, marker-file gated)
+
+Check these markers in order. Each step only runs once. All AskUserQuestion calls must follow the format: re-ground (project + branch), simplify (plain English), recommend, lettered options.
+
+**Step 1 — Welcome** (if `~/.orchestra-state/.welcome-seen` does not exist):
+
+Tell the user: "Welcome to Orchestra — the memory layer for AI agents. Key commands: `/o` (dashboard), `/o checkpoint` (save progress), `/o close` (mark done). Orchestra remembers what happened across sessions so you don't have to re-explain."
+
+Then run: `touch ~/.orchestra-state/.welcome-seen`
+
+**Step 2 — Proactive behavior** (if `~/.orchestra-state/.proactive-prompted` does not exist AND Step 1 marker exists):
+
+Use AskUserQuestion:
+
+> Orchestra can proactively suggest checkpoints when you say "done" or "looks good", and suggest closing threads when you say "shipped" or "merged."
+>
+> RECOMMENDATION: Choose A — it prevents lost work with zero effort.
+>
+> A) Keep it on (recommended)
+> B) Turn it off — I'll manage state manually
+
+If A: run `__ORCHESTRA_BIN__/orchestra-config set proactive true`
+If B: run `__ORCHESTRA_BIN__/orchestra-config set proactive false`
+Always run: `touch ~/.orchestra-state/.proactive-prompted`
+
+**Step 3 — Heartbeat** (if `~/.orchestra-state/.heartbeat-prompted` does not exist AND Step 2 marker exists):
+
+Use AskUserQuestion:
+
+> Orchestra can auto-schedule state checks every 30 minutes to catch drift.
+>
+> RECOMMENDATION: Choose A — catches forgotten state updates automatically.
+>
+> A) Yes, auto-schedule (recommended)
+> B) No, I'll run `/o heartbeat` manually when needed
+
+If A: run `__ORCHESTRA_BIN__/orchestra-config set heartbeat_auto true`
+If B: run `__ORCHESTRA_BIN__/orchestra-config set heartbeat_auto false`
+Always run: `touch ~/.orchestra-state/.heartbeat-prompted`
+
+After onboarding completes (or if all markers exist), continue to the requested `/o` subcommand.
 
 # Orchestra
 
@@ -48,9 +107,9 @@ You are an AI agent using Orchestra — a file-based coordination system. You re
 
 Orchestra state updates (checkpoint, docs audit, daily logs, MEMORY.md, progress.yaml, conversation.md, verification.md) are expensive: they read multiple files, write multiple files, and generate verbose output — all of which consumes the main context window. Over a session, this overhead compounds and accelerates compaction.
 
-**Rule: When an Orchestra operation needs to read/write 3+ files, delegate it to a background subagent via the Agent tool.**
+**Rule: When an Orchestra operation needs to read/write 3+ files, prefer delegating to a background subagent via the Agent tool.** If the Agent tool is not available, write the files inline directly — never skip writes because delegation is unavailable.
 
-The subagent gets a focused prompt, does all the file I/O in its own context, and returns a one-line summary. The main context only sees the summary — not the file contents, not the diffs, not the intermediate reads.
+When delegation is available, the subagent gets a focused prompt, does all the file I/O in its own context, and returns a one-line summary. The main context only sees the summary — not the file contents, not the diffs, not the intermediate reads.
 
 **Pattern:**
 
@@ -132,6 +191,8 @@ Store the resolved path. All paths below are relative to this `.orchestra/` root
 | `/o reopen` | `revert` | Reopen a completed or abandoned thread |
 | `/o heartbeat` | `cron` | Audit state + auto-schedule every 30 min. `/o heartbeat stop` to cancel. |
 | `/o update` | `apt upgrade` | Pull latest Orchestra and sync all repos |
+| `/o stats` | `top` | Show local usage analytics (sessions, checkpoints, nudge effectiveness) |
+| `/o release` | `npm version` | Bump version, generate changelog, commit + tag (maintainer only) |
 
 ### `/o` — Executive dashboard
 
@@ -456,9 +517,9 @@ Scans all documentation in the repo (and linked repos) against recent changes. F
 
 Force-flush all in-flight context to Orchestra files. Use before stepping away, before a long operation, or whenever you want a compaction-proof snapshot.
 
-**IMPORTANT: Delegate to a subagent.** Checkpoint writes multiple files — doing this inline consumes significant context. Follow the "Context budget" pattern above: spawn a background Agent with all the context it needs, let it do the writes, get back a one-line summary.
+**Prefer delegating to a subagent** (via the Agent tool) to keep the main context lean. But if the Agent tool is not available, write the files inline directly — the checkpoint must always complete. Do not skip writes because you cannot delegate.
 
-**Before spawning the checkpoint subagent, answer each category:**
+**Before writing, answer each category:**
 
 - **Code:** What files did you create or edit?
 - **Decisions:** What architectural, tool, or approach decisions did you make (and why)?
@@ -468,9 +529,9 @@ Force-flush all in-flight context to Orchestra files. Use before stepping away, 
 - **Progress:** Which milestone items are now done, in-progress, or blocked?
 - **Next:** What should happen next?
 
-Write down your answers (they become the subagent prompt). The subagent has no conversation context — your answers ARE its context. Be thorough here — this is what survives compaction.
+Write down your answers — they become the subagent prompt (or your own writing guide if doing it inline). Be thorough — this is what survives compaction.
 
-**What the subagent writes:**
+**Files to write (all paths relative to `.orchestra/`):**
 
 1. **`state/sessions/{session-id}.md`** — session state snapshot. Fill in every section: Working on, Progress updates, Decisions made, Research findings, Gotchas, Next steps.
 2. **`threads/NNN-slug/progress.yaml`** — update item statuses to reflect reality. Mark completed items as `done`, new work as `in-progress`.
@@ -480,12 +541,12 @@ Write down your answers (they become the subagent prompt). The subagent has no c
 6. **`decisions/NNN-slug.md`** — new decision files for any decisions made this session. Use unique filenames (next available number + descriptive slug) so concurrent agents never collide.
 7. **`MEMORY.md`** — durable learnings (gotchas, patterns, preferences). Append new entries; never overwrite existing ones.
 
-After the subagent returns, reset the edit counter and confirm to the user:
+After writing (or after the subagent returns), reset the edit counter and confirm to the user:
 ```bash
 echo 0 > .orchestra/.logs/edit-count-{session-id}
 ```
 ```
-Checkpoint saved (via subagent):
+Checkpoint saved:
   ✓ session file, daily log, thread files updated
   ✓ {N} decision(s) recorded (if any)
 ```
@@ -602,11 +663,16 @@ Thread 001-instagram-integration closed as completed (2026-03-23).
 - All items in the active thread's `progress.yaml` are `done` AND all `verification.md` items are `PASS`
 - User asks to start a new thread or switches context to different work
 
-**When you detect a signal**, prompt once — don't nag:
+**When you detect a signal**, use AskUserQuestion once — don't nag:
 
-> "Looks like 001-instagram-integration is shipped. Want me to close it? (This removes it from the dashboard and session injection — you can always reopen with `/o reopen`.)"
+> {thread-name} looks complete. Closing removes it from the dashboard — you can always reopen with `/o reopen`.
+>
+> RECOMMENDATION: Choose A if all work is merged and verified.
+>
+> A) Close it — mark as completed
+> B) Not yet — still verifying
 
-If the user says yes, run the `/o close` flow. If no, drop it — don't ask again in the same session.
+If A: run the `/o close` flow. If B: drop it — don't ask again in the same session.
 
 **Rules:**
 - Only prompt for the **active thread**. Don't prompt about threads the user isn't currently working on.
@@ -668,6 +734,29 @@ If no changelog output (same version or no entries), just report: "Orchestra is 
 **Step 4 — Enable heartbeat (automatic):**
 
 After update completes, check if heartbeat is scheduled (look for `heartbeat_scheduled: true` in `state/sessions/{session-id}.md`). If not, run `/o heartbeat` to set it up. **Remember:** cron scheduling happens in the main agent (3 tool calls: CronList → CronDelete all → CronCreate with inline prompt). Never delegate cron creation to a subagent.
+
+### `/o stats` — Local usage analytics
+
+Run `__ORCHESTRA_BIN__/orchestra-stats` and present the output. Accepts optional period: `7d` (default), `30d`, `all`.
+
+Shows: sessions started/ended, checkpoints, nudge effectiveness (how often nudges lead to checkpoints), threads created/closed. All data is local (`.orchestra/.logs/telemetry.jsonl`) — nothing leaves the machine.
+
+### `/o release` — Bump version and generate changelog (maintainer only)
+
+For Orchestra maintainers shipping a new version. Use AskUserQuestion:
+
+> Ready to release. Current version: v{current}.
+>
+> RECOMMENDATION: Choose A for bug fixes and small improvements.
+>
+> A) Patch — bug fixes, small improvements (v{current} → v{patch})
+> B) Minor — new features (v{current} → v{minor})
+> C) Major — breaking changes (v{current} → v{major})
+> D) Skip — not ready to release
+
+If A/B/C: Run `__ORCHESTRA_BIN__/orchestra-release {level}`. Show the generated changelog entry. Then suggest: "Run `./setup sync` to distribute to linked repos, then `git push origin main --tags`."
+
+If D: Do nothing.
 
 ### Post-work audit
 
@@ -847,52 +936,13 @@ After automated tests pass (or for items that can't be automated), ask the user:
 
 ### Format
 
-```markdown
-# Verification: NNN-thread-name
-
-## Checklist
-- [x] Item from spec — PASS (automated)
-- [x] Visual layout correct — PASS (manual)
-- [ ] Another item — FAIL (see below)
-- [ ] Not yet tested — PENDING
-
-## Automated test results
-- `npm test`: 42 passed, 0 failed
-- `npm run typecheck`: clean
-- `npm run lint`: clean
-- API smoke test: POST /api/v1/compress → 200, job_id returned
-
-## Results
-
-### Item from spec
-**Status:** PASS
-**Method:** automated
-**How tested:** What command was run, what was checked
-**Date:** YYYY-MM-DD
-
-### Visual layout correct
-**Status:** PASS
-**Method:** manual
-**Tested by:** user
-**How tested:** User navigated to /compress, uploaded a file, confirmed progress bar renders
-**Date:** YYYY-MM-DD
-
-### Another item
-**Status:** FAIL
-**Method:** automated
-**How tested:** What was attempted
-**Failure:** What went wrong and why
-**Resolution:** How it was fixed (commit, file, change)
-**Retested:** PASS (YYYY-MM-DD)
-```
-
-### Rules
+Read `templates/thread-verification.md` for the verification document format. Key rules:
 
 - Checklist items map 1:1 to acceptance criteria in `spec.md`
 - **Always run Phase 1 (automated) first.** Do not ask the user to manually test things you can verify yourself.
 - Every FAIL must include: what happened, why, and how it was resolved
 - PENDING means not yet tested — work is not done
-- **Do NOT mark a progress item as `done` until all verification items PASS.** If you write a handoff saying "done" but `verification.md` has FAILs or PENDINGs, you did it wrong.
+- **Do NOT mark a progress item as `done` until all verification items PASS.**
 - Receiving agents should read `verification.md` to know what's validated vs just claimed
 
 ## Decisions
@@ -908,19 +958,7 @@ After automated tests pass (or for items that can't be automated), ask the user:
 - "Let's not do X" — rejected approaches are decisions too
 
 1. Look at existing files in `decisions/` to find the next sequential number
-2. Create `decisions/NNN-slug.md` with this format:
-
-```markdown
-# NNN: Decision Title
-
-**Date:** YYYY-MM-DD
-**Context:** Why this decision was needed
-**Decision:** What was decided
-**Alternatives:** What else was considered and why it was rejected
-**Reason:** Why this option over the alternatives
-**Risks:** Tradeoffs or risks of this choice
-**Affects:** What parts of the system this impacts
-```
+2. Create `decisions/NNN-slug.md` — read `templates/decision.md` for the format
 
 Decisions are append-only. Never edit or delete existing decision files.
 
@@ -942,42 +980,7 @@ Generate briefings when the user says "let's build it", "spawn agents", "generat
 
 ### What each briefing must contain
 
-Each briefing must be fully self-contained. The receiving agent reads only this file.
-
-```markdown
-# Task: [title]
-
-**Thread:** NNN-slug
-**Repo:** repo-name
-**Priority:** high/medium/low
-
-## Context
-What this is about and why it matters. Include relevant architecture decisions.
-
-## What to build
-Specific deliverables. Be precise about files, functions, interfaces.
-
-## Files to read first
-List the exact files the agent should read before starting.
-
-## Constraints
-- Performance requirements
-- Compatibility requirements
-- Patterns to follow
-
-## Tests required
-What tests to write. Specific scenarios to cover.
-
-## Verification
-Automated: test commands to run (unit tests, typecheck, lint, API smoke tests, browser QA).
-Manual: what the user should check and what context to report back.
-
-## When done
-- Update `verification.md` with test results — all items must PASS
-- Write handoff to `handoffs/`
-- Update the thread's `progress.yaml`
-- Update repo docs if your changes affect them (see Documentation below)
-```
+Each briefing must be fully self-contained. The receiving agent reads only this file. Read `templates/briefing.md` for the format.
 
 ## Handoffs
 
@@ -989,26 +992,7 @@ When you complete a significant chunk of work that another agent (or future sess
 
 ### Format
 
-```markdown
----
-from: repo-or-agent-name
-to: repo-or-agent-name
-thread: NNN-slug
-date: YYYY-MM-DD
----
-
-## What I built
-Concrete summary of changes. Files modified, APIs added, schemas changed.
-
-## What the next agent needs to know
-Breaking changes, new dependencies, updated interfaces, migration steps.
-
-## Decisions made
-Choices made during implementation and why.
-
-## Known issues
-Bugs, TODOs, shortcuts taken, things that need follow-up.
-```
+Read `templates/handoff.md` for the format. Sections: What I built, What the next agent needs to know, Decisions made, Known issues.
 
 Handoffs are append-only records. Never overwrite or delete them. Do not skip writing a handoff if you made changes another agent needs to know about.
 
@@ -1033,38 +1017,7 @@ completed_at:           # ISO date, set when status changes to completed/abandon
 
 ### Format
 
-```yaml
-# threads/001-honestclaw-mvp/progress.yaml
-status: active
-milestones:
-  - name: M0
-    description: Scaffolding & CI/CD
-    items:
-      - name: API scaffold
-        status: done
-        repo: api
-      - name: Frontend scaffold
-        status: done
-        repo: frontend
-      - name: CI/CD pipelines
-        status: todo
-        repo: all
-  - name: M1
-    description: Core Features
-    items:
-      - name: Auth token rotation
-        status: blocked
-        repo: api
-        blocked_by: infrastructure team
-        reason: Waiting on new KMS key provisioning
-      - name: Integration tests
-        status: todo
-        repo: all
-```
-
-Each milestone has a `name`, `description` (human-readable). Each item has a `status`, `repo`, and optional `blocked_by`/`reason`.
-
-Valid statuses: `todo`, `in_progress`, `done`, `blocked`. Blocked items must include `blocked_by` and `reason`.
+YAML with milestones and items. Valid statuses: `todo`, `in_progress`, `done`, `blocked`. Blocked items must include `blocked_by` and `reason`. Each milestone has `name`, `description`. Each item has `status`, `repo`.
 
 ### Why per-thread?
 
@@ -1102,33 +1055,11 @@ If you see a **CONCURRENT SESSIONS** warning at session start, be aware other ag
 
 ### Format
 
-```markdown
-# Session Context
-
-## Working on
-003-compress-video-pipeline — building ffmpeg transcode config
-
-## Key context
-- User wants 3 output resolutions: 1080p, 720p, 480p
-- Decided to use fluent-ffmpeg over raw child_process (decision 004)
-- API endpoint accepts multipart, returns job_id UUID
-
-## Current state
-- API route done, transcoder WIP — 720p/480p flags not added yet
-- verification.md: 1/3 PASS, 2 PENDING
-
-## Next steps
-- Add resolution array to transcode config
-- Test all 3 outputs
-- Write handoff to frontend
-```
-
-### Rules
+Read `templates/session.md` for the session context format. Sections: Working on, Key context, Current state, Next steps.
 
 - **Overwrite YOUR session file each time** — this is not a log, it's a snapshot of right now
 - Keep it under 50 lines — just enough to resume without loss
 - The PostCompact hook re-injects this file automatically after compaction
-- When the session ends, this file becomes stale — the session log and daily log are the durable records
 
 ### What triggers an update
 
@@ -1201,41 +1132,12 @@ Examples of what "now" means:
 
 ### Format
 
-```markdown
-# Backlog
+Read `templates/backlog.md` for the format. Three categories: Future improvements, Tech debt, Investigate.
 
-## Future improvements
-
-- **Structured identity graph from Instagram tags** — extract `taggedUsers` from JSONB into junction table for fast graph queries. All raw data preserved, can backfill anytime. Thread: `001-instagram-integration` | Priority: when identity graph becomes product focus
-
-- **Redis caching for API responses** — high-traffic endpoints hitting DB on every request. Thread: `003-api-performance` | Priority: before launch
-
-## Tech debt
-
-- **Duplicate email validation logic** — exists in both `lib/auth/` and `lib/onboarding/`. Should consolidate. Thread: `002-auth-migration` | Priority: low
-
-## Investigate
-
-- **WebSocket vs SSE for real-time updates** — currently polling every 10s. Worth investigating if user count grows. Thread: none | Priority: post-MVP
-```
-
-### Rules
-
-- **One line per item** — title, brief context, thread reference, priority. The thread has the full details.
-- **Always include `Thread: NNN-slug`** if the item came from a thread. This is the pointer back to full context.
-- **Three categories:** `Future improvements` (features to build), `Tech debt` (code to fix), `Investigate` (unknowns to research)
-- **Keep it under 50 items.** If it's growing past that, some items should become threads with plans.
-- **Remove items when they become threads.** Once work is actively planned, it moves from backlog to a thread — don't track in both places.
-
-### `/o` dashboard integration
-
-The `/o` dashboard should include a **Backlog** count in the footer when items exist:
-
-```
-📋 3 backlog items — see BACKLOG.md
-```
-
-Don't dump the full backlog into the dashboard — just surface the count. The backlog is reference material, not active work.
+- **One line per item** — title, brief context, thread reference, priority
+- **Keep it under 50 items.** If growing past that, items should become threads.
+- **Remove items when they become threads.** Don't track in both places.
+- The `/o` dashboard shows a backlog count in the footer when items exist.
 
 ## Agent Awareness — Staying Current Mid-Session
 

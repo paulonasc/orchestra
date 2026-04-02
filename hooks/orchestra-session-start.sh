@@ -63,6 +63,12 @@ Repo: $CURRENT_REPO
 (filled by checkpoint)
 SESSEOF
 
+# ─── Telemetry: session start ─────────────────────────────────
+_TEL_DIR="$ORCH_ROOT/.logs"
+mkdir -p "$_TEL_DIR" 2>/dev/null || true
+_SESSION_COUNT=$(ls "$ORCH_ROOT/state/sessions/"*.md 2>/dev/null | wc -l | tr -d ' ')
+echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"session_start\",\"sessions\":$_SESSION_COUNT}" >> "$_TEL_DIR/telemetry.jsonl" 2>/dev/null || true
+
 TODAY="$(date +%Y-%m-%d)"
 YESTERDAY="$(date -v-1d +%Y-%m-%d 2>/dev/null || date -d 'yesterday' +%Y-%m-%d 2>/dev/null)"
 
