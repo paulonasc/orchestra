@@ -96,6 +96,58 @@ describe('upgrade-flow', () => {
       expect(version.trim().length).toBeGreaterThan(0);
     }
   });
+
+  test('setup sync preserves .orchestra/ state', async () => {
+    // This test reuses testDir from the first test (setup link already ran)
+    // The .orchestra/ directory should already exist with state
+
+    const project = join(testDir, 'my-project');
+    const orchestra = join(project, '.orchestra');
+
+    // Write some state that should survive sync
+    await writeFile(join(orchestra, 'decisions', '001-test-decision.md'), '# Test Decision\nWe chose X over Y.\n');
+    await writeFile(join(orchestra, 'MEMORY.md'), '# Memory\n\n## Gotchas\n\n- Test gotcha\n');
+    const memoryDir = join(orchestra, 'memory');
+    await mkdir(memoryDir, { recursive: true });
+    await writeFile(join(memoryDir, '2026-04-02.md'), '## 10:00 — Test session\n');
+
+    // Run setup link AGAIN (simulates sync/upgrade)
+    await $`cd ${ORCHESTRA_SRC} && bash setup link ${project}`;
+
+    // Verify state survived
+    const decision = await readFile(join(orchestra, 'decisions', '001-test-decision.md'), 'utf-8');
+    expect(decision).toContain('We chose X over Y');
+
+    const memory = await readFile(join(orchestra, 'MEMORY.md'), 'utf-8');
+    expect(memory).toContain('Test gotcha');
+
+    const dailyLog = await readFile(join(memoryDir, '2026-04-02.md'), 'utf-8');
+    expect(dailyLog).toContain('Test session');
+
+    // Verify skill files were UPDATED (not preserved — these are Orchestra's files)
+    expect(await exists(join(project, '.claude', 'skills', 'o', 'SKILL.md'))).toBe(true);
+    const commands = await readdir(join(project, '.claude', 'skills', 'o', 'commands'));
+    expect(commands.length).toBeGreaterThan(0);
+  });
+
+  test('sync removes orphaned command files', async () => {
+    const project = join(testDir, 'my-project');
+    const commandsDir = join(project, '.claude', 'skills', 'o', 'commands');
+
+    // Plant a fake orphaned file
+    await writeFile(join(commandsDir, 'old-removed-command.md'), '# This should be deleted by sync');
+
+    // Run setup link again
+    await $`cd ${ORCHESTRA_SRC} && bash setup link ${project}`;
+
+    // Verify orphan was cleaned up
+    const commands = await readdir(commandsDir);
+    expect(commands).not.toContain('old-removed-command.md');
+
+    // Verify real commands still exist
+    expect(commands).toContain('checkpoint.md');
+    expect(commands).toContain('dashboard.md');
+  });
 });
 
 async function exists(path: string): Promise<boolean> {

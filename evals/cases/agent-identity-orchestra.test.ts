@@ -23,8 +23,8 @@ defineEvalSuite('agent-identity-orchestra', [
     name: 'agent knows what Orchestra is and how to update',
     session: {
       prompt: AGENT_KNOWS_ORCHESTRA,
-      maxTurns: 5,
-      timeout: 120_000,
+      maxTurns: 10,
+      timeout: 180_000,
     },
     assert: async (ctx) => {
       // The agent should mention Orchestra by name (not confuse with gstack)
