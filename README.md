@@ -46,28 +46,31 @@ Agents read and write these files. Hooks auto-inject context at session start. T
 **Step 1:** Clone Orchestra.
 
 ```bash
-git clone https://github.com/orchestrahq/orchestra.git ~/.orchestra
+git clone https://github.com/orchestrahq/orchestra.git ~/orchestra
 ```
 
-**Step 2:** Open Claude Code and paste this:
+**Step 2:** Run the guided setup.
 
-> Set up Orchestra. It's installed at `~/.orchestra`. Ask me which repos to coordinate, then run `~/.orchestra/setup init <path>` and `~/.orchestra/setup link <repo>` for each one.
+```bash
+cd ~/orchestra && ./setup install
+```
 
-Claude handles the rest — links repos, installs hooks, injects awareness rules.
+Orchestra will ask which project to coordinate, create the `.orchestra/` state directory, install hooks, and inject the `/o` skill. Done.
 
 ### Manual install
 
 ```bash
-git clone https://github.com/orchestrahq/orchestra.git ~/.orchestra
+git clone https://github.com/orchestrahq/orchestra.git ~/orchestra
 
-# Create .orchestra/ wherever you want
-~/.orchestra/setup init ~/Projects/pied-piper
+# Create .orchestra/ at your project root
+~/orchestra/setup init ~/Projects/my-app
 
-# Link repos — they don't need to be co-located
-~/.orchestra/setup link ~/Projects/pied-piper-api
-~/.orchestra/setup link ~/Work/pied-piper-frontend
-~/.orchestra/setup link /opt/repos/pied-piper-infra
+# Link repos
+~/orchestra/setup link ~/Projects/my-app
+~/orchestra/setup link ~/Projects/my-api
 ```
+
+Note: Clone to `~/orchestra` not `~/.orchestra` — avoids confusion with the `.orchestra/` state directory.
 
 Each linked repo gets:
 - `.orchestra.link` — pointer to the shared `.orchestra/` directory

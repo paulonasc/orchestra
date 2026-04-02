@@ -28,10 +28,11 @@ usage() {
 Orchestra — multi-agent coordination through files.
 
 Usage:
-  ./setup init [path]         Create .orchestra/ at path (default: cwd)
-  ./setup link <repo> [orch]  Link a repo to an .orchestra/ directory
-  ./setup sync [orch]         Re-link all known repos (after update)
-  ./setup help                Show this message
+  ./setup install              Guided first-time setup (recommended)
+  ./setup init [path]          Create .orchestra/ at path (default: cwd)
+  ./setup link <repo> [orch]   Link a repo to an .orchestra/ directory
+  ./setup sync [orch]          Re-link all known repos (after update)
+  ./setup help                 Show this message
 
 Examples:
   # Single repo
@@ -482,9 +483,70 @@ cmd_sync() {
 }
 
 # ============================================================
+# INSTALL — guided first-time setup
+# ============================================================
+cmd_install() {
+  echo ""
+  bold "Welcome to Orchestra — the memory layer for AI agents."
+  echo ""
+  echo "This will set up Orchestra for one of your projects."
+  echo ""
+
+  printf "What project directory do you want to coordinate?\n"
+  printf "(Enter path, or . for current directory): "
+  read -r project_path
+
+  if [ -z "$project_path" ]; then
+    red "Error: no path provided"
+    exit 1
+  fi
+
+  # Expand ~ and make absolute
+  project_path="${project_path/#\~/$HOME}"
+  if [ "$project_path" = "." ]; then
+    project_path="$(pwd)"
+  elif [[ "$project_path" != /* ]]; then
+    project_path="$(cd "$project_path" 2>/dev/null && pwd)" || {
+      red "Error: directory does not exist: $project_path"
+      exit 1
+    }
+  fi
+
+  if [ ! -d "$project_path" ]; then
+    red "Error: directory does not exist: $project_path"
+    exit 1
+  fi
+
+  project_path="$(cd "$project_path" && pwd)"
+
+  echo ""
+  bold "Setting up Orchestra for $project_path"
+  echo ""
+
+  # Step 1: init
+  cmd_init "$project_path"
+  echo ""
+
+  # Step 2: link
+  cmd_link "$project_path"
+  echo ""
+
+  green "Orchestra is ready!"
+  echo ""
+  echo "  Next steps:"
+  echo "    1. Open Claude Code in your project:  cd $project_path && claude"
+  echo "    2. Type /o to see the dashboard"
+  echo ""
+  echo "  To add more repos to this project:"
+  echo "    $ORCHESTRA_DIR/setup link /path/to/another/repo"
+  echo ""
+}
+
+# ============================================================
 # Main — route subcommand
 # ============================================================
 case "${1:-help}" in
+  install) shift; cmd_install ;;
   init)  shift; cmd_init "${1:-}" ;;
   link)  shift; cmd_link "$@" ;;
   sync)  shift; cmd_sync "${1:-}" ;;
