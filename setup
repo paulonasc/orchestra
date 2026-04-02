@@ -364,7 +364,7 @@ cmd_link() {
   bold "Linking $(basename "$repo_path") → $orch_dir"
 
   # Write .orchestra.link (machine-specific, should not be committed)
-  echo "root: $orch_dir" > "$repo_path/.orchestra.link"
+  printf "root: %s\ninstall: %s\n" "$orch_dir" "$ORCHESTRA_DIR" > "$repo_path/.orchestra.link"
   echo "  Created $repo_path/.orchestra.link"
 
   # Add .orchestra.link to repo's .gitignore if not already there
@@ -447,10 +447,60 @@ RULESEOF
     echo "  Registered in linked-repos manifest"
   fi
 
+  # Install global worktree auto-link hook
+  install_global_autolink_hook
+
   stamp_version
 
   echo ""
   green "Linked! Open Claude Code in $(basename "$repo_path") and type /o"
+}
+
+# ============================================================
+# Install global worktree auto-link hook (~/.claude/settings.json)
+# ============================================================
+install_global_autolink_hook() {
+  local global_settings="$HOME/.claude/settings.json"
+  local hook_cmd="bash ${HOOKS_DIR}/orchestra-autolink-worktree.sh"
+
+  command -v jq &>/dev/null || return 0
+
+  mkdir -p "$HOME/.claude"
+
+  local tmp_file
+  tmp_file="$(mktemp)"
+
+  if [ -f "$global_settings" ] && [ -s "$global_settings" ]; then
+    cp "$global_settings" "$tmp_file"
+  else
+    echo '{}' > "$tmp_file"
+  fi
+
+  # Ensure hooks object exists
+  jq 'if .hooks == null then .hooks = {} else . end' "$tmp_file" > "${tmp_file}.2" && mv "${tmp_file}.2" "$tmp_file"
+
+  # Check if already installed — update path if so, otherwise add new
+  if jq -e '.hooks.SessionStart // [] | any(.hooks[]?.command | test("orchestra-autolink"))' "$tmp_file" >/dev/null 2>&1; then
+    # Update existing hook command (handles Orchestra moves)
+    jq --arg cmd "$hook_cmd" '
+      .hooks.SessionStart |= map(
+        if (.hooks // [] | any(.command | test("orchestra-autolink")))
+        then .hooks = [{"type":"command","command":$cmd}]
+        else . end
+      )
+    ' "$tmp_file" > "${tmp_file}.2" && mv "${tmp_file}.2" "$tmp_file"
+  else
+    # Add new autolink hook
+    jq --arg cmd "$hook_cmd" '
+      .hooks.SessionStart = (.hooks.SessionStart // []) + [{
+        "matcher": "startup|resume",
+        "hooks": [{"type": "command", "command": $cmd}]
+      }]
+    ' "$tmp_file" > "${tmp_file}.2" && mv "${tmp_file}.2" "$tmp_file"
+    echo "  Installed global worktree auto-link hook"
+  fi
+
+  mv "$tmp_file" "$global_settings"
 }
 
 # ============================================================
