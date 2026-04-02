@@ -29,7 +29,8 @@ echo "## $TIME — Session ended ($WORKTREE_NAME)" >> "$ORCH_ROOT/memory/$TODAY.
 
 # ─── Telemetry: session end ──────────────────────────────────
 if [ -n "$ORCH_ROOT" ]; then
-  echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"session_end\"}" >> "$ORCH_ROOT/.logs/telemetry.jsonl" 2>/dev/null || true
+  _FINAL_EDITS=$(cat "$ORCH_ROOT/.logs/edit-count-$(get_session_id)" 2>/dev/null || echo "0")
+  echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"hook_stop\",\"edit_count\":$_FINAL_EDITS}" >> "$ORCH_ROOT/.logs/telemetry.jsonl" 2>/dev/null || true
 fi
 
 # ─── Trigger background telemetry sync ──────────────────────────

@@ -35,6 +35,9 @@ TODAY="$(date +%Y-%m-%d)"
 ensure_daily_log "$ORCH_ROOT" "$TODAY"
 echo "  · [auto] Context compacted at $(date +%H:%M) (session: $SESSION_ID)" >> "$ORCH_ROOT/memory/$TODAY.md" 2>/dev/null || true
 
+# Telemetry: pre-compact event
+echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"hook_pre_compact\",\"session_id\":\"$(get_session_id)\"}" >> "$ORCH_ROOT/.logs/telemetry.jsonl" 2>/dev/null || true
+
 # 2. Stamp the session file so post-compact knows when last compaction happened
 if [ -n "$SESSION_FILE" ] && [ -f "$SESSION_FILE" ]; then
   echo "" >> "$SESSION_FILE"
