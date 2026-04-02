@@ -128,6 +128,44 @@ export function checkFileWrite(
   return { written: false };
 }
 
+/**
+ * Deterministic check: did the agent Read a file matching the given pattern?
+ * Scans for Read tool calls whose file_path matches the pattern.
+ * Returns all matching reads (not just the first).
+ */
+export function checkFileRead(
+  transcript: any[],
+  pathPattern: string | RegExp
+): { read: boolean; paths: string[] } {
+  const toolCalls = extractToolCalls(transcript);
+  const pattern =
+    typeof pathPattern === 'string' ? new RegExp(escapeRegExp(pathPattern)) : pathPattern;
+  const paths: string[] = [];
+
+  for (const call of toolCalls) {
+    if (call.tool === 'Read' || call.tool === 'read') {
+      const filePath = call.input?.file_path || call.input?.path || '';
+      if (pattern.test(filePath)) {
+        paths.push(filePath);
+      }
+    }
+  }
+
+  return { read: paths.length > 0, paths };
+}
+
+/**
+ * Deterministic check: count how many distinct command files the agent Read.
+ * Used to verify the router reads ONE command file, not multiple.
+ */
+export function countCommandFileReads(
+  transcript: any[]
+): { count: number; files: string[] } {
+  const result = checkFileRead(transcript, /commands\/[a-z]+\.md/);
+  const unique = [...new Set(result.paths.map(p => p.split('/').pop() || ''))];
+  return { count: unique.length, files: unique };
+}
+
 // --- Internal helpers ---
 
 /**

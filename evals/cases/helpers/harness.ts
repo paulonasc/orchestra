@@ -12,7 +12,7 @@
 import { describe, test, afterAll } from 'bun:test';
 import { createTestWorkDir, cleanupTestWorkDir, type TestWorkDir } from './setup';
 import { runSession, type SessionOptions, type SessionResult } from '../../helpers/session-runner';
-import { judgeBehavior, checkSkillInvocation, checkFileWrite, type JudgeResult } from '../../helpers/judge';
+import { judgeBehavior, checkSkillInvocation, checkFileWrite, checkFileRead, countCommandFileReads, type JudgeResult } from '../../helpers/judge';
 import { createProvider, type LLMProvider } from '../../helpers/providers';
 
 // ---- Public types ----
@@ -25,6 +25,10 @@ export interface EvalAssertionContext {
   checkSkill: (skillName: string) => { invoked: boolean; args?: string };
   /** Convenience: check if the agent wrote to a file matching the pattern */
   checkFile: (pattern: string | RegExp) => { written: boolean; content?: string };
+  /** Convenience: check if the agent Read a file matching the pattern */
+  checkRead: (pattern: string | RegExp) => { read: boolean; paths: string[] };
+  /** Convenience: count distinct command files the agent Read */
+  countCommandReads: () => { count: number; files: string[] };
   /** Convenience: run the LLM judge on the transcript */
   judge: (check: { question: string; passCriteria: string }) => Promise<JudgeResult>;
 }
@@ -112,6 +116,10 @@ export function defineEvalSuite(
               checkSkillInvocation(result.transcript, skillName),
             checkFile: (pattern: string | RegExp) =>
               checkFileWrite(result.transcript, pattern),
+            checkRead: (pattern: string | RegExp) =>
+              checkFileRead(result.transcript, pattern),
+            countCommandReads: () =>
+              countCommandFileReads(result.transcript),
             judge: (check: { question: string; passCriteria: string }) =>
               judgeBehavior(provider, result.transcript, check),
           };
