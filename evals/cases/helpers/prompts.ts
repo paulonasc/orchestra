@@ -35,9 +35,7 @@ on the existing Express app in src/app.ts.
 Then save your progress with /o checkpoint.`;
 
 export const CHECKPOINT_WRITES_CORRECT_FILES = `\
-Add input validation to the POST /users endpoint using zod.
-Create a validation schema that requires name (string, 2-50 chars) and email (valid email).
-Return 400 with error details on validation failure.
+Add a comment to the top of src/app.ts: "// TODO: add input validation".
 
 Then run /o checkpoint to save your progress.`;
 
