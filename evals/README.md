@@ -80,7 +80,10 @@ source .env
 EVALS=1 bun test evals/cases/
 
 # Single eval
-EVALS=1 bun test evals/cases/user-done-suggests-checkpoint.test.ts
+EVALS=1 bun test evals/cases/checkpoint/user-done-suggests.test.ts
+
+# All evals in a category
+EVALS=1 bun test evals/cases/checkpoint/
 
 # Custom judge model
 EVAL_JUDGE_MODEL=gpt-5.4-mini EVALS=1 bun test evals/cases/
@@ -122,13 +125,13 @@ export async function writeMyScenarioFixture(env: TestWorkDir): Promise<void> {
 
 ### 3. Create the test file
 
-Create `evals/cases/my-new-scenario.test.ts`:
+Create `evals/cases/<category>/my-new-scenario.test.ts` (see CONTRIBUTING.md for which category):
 
 ```typescript
 import { expect } from 'bun:test';
-import { defineEvalSuite } from './helpers/harness';
-import { writeMyScenarioFixture } from './helpers/fixtures';
-import { MY_NEW_SCENARIO } from './helpers/prompts';
+import { defineEvalSuite } from '../helpers/harness';
+import { writeMyScenarioFixture } from '../helpers/fixtures';
+import { MY_NEW_SCENARIO } from '../helpers/prompts';
 
 defineEvalSuite('my-new-scenario', [
   {
@@ -166,7 +169,7 @@ The two-tier assertion pattern is important: deterministic checks are faster, ch
 ### 4. Run it
 
 ```bash
-EVALS=1 bun test evals/cases/my-new-scenario.test.ts
+EVALS=1 bun test evals/cases/<category>/my-new-scenario.test.ts
 ```
 
 ## Writing a new hook test
@@ -236,14 +239,20 @@ evals/
       setup.ts          # createTestWorkDir: full Orchestra installation in tmp
       fixtures.ts       # Scenario-specific file generators
       prompts.ts        # All eval prompts as exported constants
-    *.test.ts           # Behavioral eval test files
+    router/             # Router dispatch tests (3)
+    checkpoint/         # Checkpoint writing, triggers, nudge (8)
+    routing/            # CLAUDE.md routing rules (3)
+    session/            # Compaction, concurrent, context (3)
+    discovery/          # Zero-context, plan routing (2)
+    decisions/          # Recording, implicit (2)
+    verification/       # Updates, implicit (2)
+    regressions/        # Plan routing bugs (2)
+    identity/           # Agent knows Orchestra (1)
+    stats/              # Telemetry command (1)
   hooks/
     *.test.ts           # Hook unit tests (no LLM)
-  fixtures/
-    orchestra-setup/    # Static fixture files (if needed)
   runs/
     *.json              # Saved failure transcripts for debugging
-    .gitignore          # Ignores JSON transcripts from version control
 ```
 
 ## Environment variables
