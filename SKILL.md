@@ -99,6 +99,24 @@ If A: run `__ORCHESTRA_BIN__/orchestra-config set heartbeat_auto true`
 If B: run `__ORCHESTRA_BIN__/orchestra-config set heartbeat_auto false`
 Always run: `touch ~/.orchestra-state/.heartbeat-prompted`
 
+**Step 4 — Telemetry** (if `~/.orchestra-state/.telemetry-prompted` does not exist AND Step 3 marker exists):
+
+Use AskUserQuestion:
+
+> Help Orchestra get better! Community mode shares anonymous usage data (which commands you use, how often) with a stable device ID so we can track trends and fix bugs.
+> No code, file paths, or repo names are ever sent. Change anytime with `orchestra-config set telemetry off`.
+>
+> RECOMMENDATION: Choose A — helps us improve Orchestra for everyone.
+>
+> A) Community — usage data + device ID (recommended)
+> B) Anonymous — counters only, no device ID
+> C) No thanks — fully off
+
+If A: run `__ORCHESTRA_BIN__/orchestra-config set telemetry community`
+If B: run `__ORCHESTRA_BIN__/orchestra-config set telemetry anonymous`
+If C: run `__ORCHESTRA_BIN__/orchestra-config set telemetry off`
+Always run: `touch ~/.orchestra-state/.telemetry-prompted`
+
 After onboarding completes (or if all markers exist), continue to the requested `/o` subcommand.
 
 # Orchestra
