@@ -103,7 +103,9 @@ BLEOF
   # Note: progress.yaml is per-thread (threads/NNN-slug/progress.yaml), not global
   [ ! -f "$orch_dir/state/blocked.yaml" ] && echo "blocked: []" > "$orch_dir/state/blocked.yaml" && echo "  Created state/blocked.yaml"
 
-  # Discovery file — helps agents find and use .orchestra/ without external context
+  # Discovery file — helps agents find and use .orchestra/ without external context.
+  # Note: research shows passive breadcrumbs have limited effect (~4% improvement).
+  # Primary protection is CLAUDE.md routing rules. See: https://arxiv.org/html/2602.11988v1
   if [ ! -f "$orch_dir/README.md" ]; then
     cat > "$orch_dir/README.md" << 'DISCOVERY_EOF'
 # .orchestra/ — Multi-agent coordination state

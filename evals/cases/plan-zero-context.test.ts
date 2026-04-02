@@ -1,5 +1,5 @@
 /**
- * Eval: Zero Orchestra Context — discovery via README.md.
+ * Eval: Zero Orchestra Context — known limitation.
  *
  * Simulates the worst-case scenario for plan documentation:
  * - NO .claude/skills/o/SKILL.md (agent cannot discover /o skill)
@@ -7,9 +7,18 @@
  * - NO .claude/settings.json hooks (no session-start injection, no nudge)
  * - .orchestra/ directory exists on disk with an active thread AND a README.md
  *
- * The agent should discover .orchestra/ by exploring the directory and reading
- * the README.md discovery file, which explains the directory structure and
- * where plans should be written.
+ * Research (ETH Zurich, "Evaluating AGENTS.md", Feb 2026 — 138 repos, 5,694 PRs):
+ * https://arxiv.org/html/2602.11988v1
+ *
+ * Key findings relevant to this test:
+ * - Passive repo-level context files improve agent performance by only ~4%
+ * - Repository overviews don't guide agents to relevant files
+ * - Agents anchor on cwd/repo root without explicit routing instructions
+ * - "The best documentation for an AI agent is code that doesn't need one"
+ *
+ * This test documents the known limitation: passive breadcrumbs (.orchestra/README.md,
+ * .gitignore comments) are insufficient for zero-context discovery. The primary
+ * protection is CLAUDE.md routing rules (committed to git, created on fresh projects).
  *
  * Does NOT use defineEvalSuite (which auto-installs SKILL.md). Instead, it
  * manually calls createTestWorkDir and strips the Orchestra context.
@@ -153,9 +162,10 @@ describeFn('plan-zero-context', () => {
       console.log('=================================\n');
 
       // ---- Known limitation: zero-context discovery doesn't work reliably ----
-      // The .orchestra/README.md and .gitignore breadcrumbs help but aren't
-      // enough to reliably make agents use .orchestra/ without prompt context.
-      // The real fix is CLAUDE.md routing rules (created on fresh projects by setup link).
+      // Research: https://arxiv.org/html/2602.11988v1 (ETH Zurich, Feb 2026)
+      // Passive breadcrumbs (.orchestra/README.md, .gitignore comments) improve
+      // agent behavior by only ~4%. Agents anchor on cwd/repo root without
+      // explicit routing. The real fix is CLAUDE.md routing rules.
       // This test documents the current behavior. Flip to expect(true) when solved.
       expect(orchestraPlanCheck.written).toBe(false);
 
