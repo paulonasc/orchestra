@@ -50,6 +50,43 @@ export async function createTestWorkDir(name: string): Promise<TestWorkDir> {
     await mkdir(dir, { recursive: true });
   }
 
+  // Discovery README.md — helps agents find .orchestra/ without external context
+  await writeFile(
+    join(orchestra, 'README.md'),
+    `# .orchestra/ — Multi-agent coordination state
+
+This directory is managed by [Orchestra](https://github.com/orchestrahq/orchestra).
+
+## For AI agents
+
+If you find this directory, you should use it for coordination state:
+- **Plans** go in \`threads/<active-thread>/plan.md\`
+- **Decisions** go in \`decisions/NNN-slug.md\`
+- **Research** goes in \`threads/<active-thread>/research.md\`
+- **Verification** results go in \`threads/<active-thread>/verification.md\`
+- Check \`state/active-thread.md\` to find the current active thread.
+
+## Structure
+
+\`\`\`
+.orchestra/
+├── MEMORY.md           # permanent project memory
+├── state/
+│   └── active-thread.md  # current thread name
+├── threads/            # per-thread workspaces
+│   └── NNN-slug/
+│       ├── plan.md
+│       ├── spec.md
+│       ├── progress.yaml
+│       └── verification.md
+├── decisions/          # architectural decision records
+└── memory/             # daily logs
+\`\`\`
+
+Run \`/o\` in Claude Code for the full dashboard.
+`,
+  );
+
   // .orchestra.link so hooks can find the root
   await writeFile(join(root, '.orchestra.link'), `root: ${orchestra}\n`);
 

@@ -103,6 +103,44 @@ BLEOF
   # Note: progress.yaml is per-thread (threads/NNN-slug/progress.yaml), not global
   [ ! -f "$orch_dir/state/blocked.yaml" ] && echo "blocked: []" > "$orch_dir/state/blocked.yaml" && echo "  Created state/blocked.yaml"
 
+  # Discovery file — helps agents find and use .orchestra/ without external context
+  if [ ! -f "$orch_dir/README.md" ]; then
+    cat > "$orch_dir/README.md" << 'DISCOVERY_EOF'
+# .orchestra/ — Multi-agent coordination state
+
+This directory is managed by [Orchestra](https://github.com/orchestrahq/orchestra).
+
+## For AI agents
+
+If you find this directory, you should use it for coordination state:
+- **Plans** go in `threads/<active-thread>/plan.md`
+- **Decisions** go in `decisions/NNN-slug.md`
+- **Research** goes in `threads/<active-thread>/research.md`
+- **Verification** results go in `threads/<active-thread>/verification.md`
+- Check `state/active-thread.md` to find the current active thread.
+
+## Structure
+
+```
+.orchestra/
+├── MEMORY.md           # permanent project memory
+├── state/
+│   └── active-thread.md  # current thread name
+├── threads/            # per-thread workspaces
+│   └── NNN-slug/
+│       ├── plan.md
+│       ├── spec.md
+│       ├── progress.yaml
+│       └── verification.md
+├── decisions/          # architectural decision records
+└── memory/             # daily logs
+```
+
+Run `/o` in Claude Code for the full dashboard.
+DISCOVERY_EOF
+    echo "  Created .orchestra/README.md (agent discovery)"
+  fi
+
   # .gitignore
   if [ ! -f "$orch_dir/.gitignore" ]; then
     cat > "$orch_dir/.gitignore" << 'GIEOF'

@@ -1,15 +1,15 @@
 /**
- * Hostile eval: Zero Orchestra Context.
+ * Eval: Zero Orchestra Context — discovery via README.md.
  *
  * Simulates the worst-case scenario for plan documentation:
  * - NO .claude/skills/o/SKILL.md (agent cannot discover /o skill)
  * - NO CLAUDE.md (no mention of Orchestra rules anywhere)
  * - NO .claude/settings.json hooks (no session-start injection, no nudge)
- * - .orchestra/ directory exists on disk with an active thread
+ * - .orchestra/ directory exists on disk with an active thread AND a README.md
  *
- * This reproduces the real bug where a compacted session loses all Orchestra
- * context and the agent creates a random plans/ directory in the repo root
- * instead of writing to .orchestra/threads/NNN/plan.md.
+ * The agent should discover .orchestra/ by exploring the directory and reading
+ * the README.md discovery file, which explains the directory structure and
+ * where plans should be written.
  *
  * Does NOT use defineEvalSuite (which auto-installs SKILL.md). Instead, it
  * manually calls createTestWorkDir and strips the Orchestra context.
@@ -48,7 +48,7 @@ afterAll(async () => {
 
 describeFn('plan-zero-context', () => {
   test(
-    'agent with zero Orchestra context writes plan outside .orchestra/',
+    'agent with zero Orchestra context discovers .orchestra/ via README.md',
     async () => {
       // 1. Create full test environment (includes SKILL.md, CLAUDE.md, hooks)
       const env = await createTestWorkDir('plan-zero-context');
@@ -152,24 +152,18 @@ describeFn('plan-zero-context', () => {
       console.log(`Judge rationale:        ${judgeResult.rationale}`);
       console.log('=================================\n');
 
-      // ---- Expect the bug to manifest ----
-      // This test documents the CURRENT broken behavior.
-      // When zero context is provided, the agent SHOULD use .orchestra/ but DOESN'T.
+      // ---- Expect the fix to work ----
+      // The agent should discover .orchestra/ via README.md and write there.
 
-      // Primary assertion: the agent did NOT write to .orchestra/threads/
-      // (This is the bug — flip to expect(true) once fixed)
-      expect(orchestraPlanCheck.written).toBe(false);
+      // The agent SHOULD now discover .orchestra/ via README.md
+      expect(orchestraPlanCheck.written).toBe(true);
 
-      // Secondary assertion: the agent created rogue files outside .orchestra/
-      // Either wrote to plans/, docs/, or just printed text without writing anything
+      // Agent should NOT have created rogue directories
       const agentWroteOutsideOrchestra = roguePlanCheck.written || newDirs.length > 0;
-      const agentOnlyPrintedText = !orchestraPlanCheck.written && !roguePlanCheck.written && newDirs.length === 0;
+      expect(agentWroteOutsideOrchestra).toBe(false);
 
-      // At least one of these should be true: agent went rogue OR only printed text
-      expect(agentWroteOutsideOrchestra || agentOnlyPrintedText).toBe(true);
-
-      // Judge should also confirm the agent did NOT use Orchestra
-      expect(judgeResult.pass).toBe(false);
+      // Judge should confirm the agent used Orchestra
+      expect(judgeResult.pass).toBe(true);
     },
     300_000, // 5 min timeout — LLM session + judge call
   );
