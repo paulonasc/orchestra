@@ -122,3 +122,8 @@ The rate limiting feature is shipped. Merged the PR, deployed to production. All
 
 export const STATS_SHOWS_TELEMETRY = `\
 Show me Orchestra usage stats for this project.`;
+
+// Tests that the agent knows what Orchestra is and how to check for updates.
+// @origin real-user — Paulo tested on second computer, agent confused Orchestra with gstack.
+export const AGENT_KNOWS_ORCHESTRA = `\
+Is Orchestra up to date? How do I update it?`;

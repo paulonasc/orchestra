@@ -8,11 +8,43 @@
 _OLD_VER=$(cat __ORCHESTRA_DIR__/VERSION 2>/dev/null | tr -d '[:space:]')
 ```
 
-**Step 2 — Pull and sync:**
+**Step 2 — Detect install type and update:**
 
 ```bash
 _ORCH_ROOT=$(grep "^root:" .orchestra.link 2>/dev/null | sed 's/^root: *//')
+```
+
+Check install type:
+
+```bash
+[ -d "__ORCHESTRA_DIR__/.git" ] && echo "git install" || echo "vendored install"
+```
+
+**If git install** — pull and sync (existing flow):
+
+```bash
 cd __ORCHESTRA_DIR__ && git pull origin main && ./setup sync "$_ORCH_ROOT"
+```
+
+**If vendored install** — clone, swap, and sync:
+
+```bash
+_TMP=$(mktemp -d)
+git clone --depth 1 https://github.com/paulonasc/orchestra.git "$_TMP/orchestra"
+_OLD="__ORCHESTRA_DIR__"
+cp "$_OLD/VERSION" "$HOME/.orchestra-state/just-upgraded-from" 2>/dev/null
+mv "$_OLD" "${_OLD}.bak"
+mv "$_TMP/orchestra" "$_OLD"
+rm -rf "$_OLD/.git"  # keep it vendored
+cd "$_OLD" && ./setup sync "$_ORCH_ROOT"
+if [ $? -eq 0 ]; then
+  rm -rf "${_OLD}.bak" "$_TMP"
+else
+  # Rollback on failure
+  rm -rf "$_OLD"
+  mv "${_OLD}.bak" "$_OLD"
+  rm -rf "$_TMP"
+fi
 ```
 
 **Step 3 — Show changelog:**
