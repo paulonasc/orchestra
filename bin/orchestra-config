@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# orchestra-config — read/write ~/.orchestra-state/config.yaml
+#
+# Usage:
+#   orchestra-config get <key>          — read a config value
+#   orchestra-config set <key> <value>  — write a config value
+#   orchestra-config list               — show all config
+#
+# Env overrides (for testing):
+#   ORCHESTRA_STATE_DIR  — override ~/.orchestra-state directory
+set -euo pipefail
+
+STATE_DIR="${ORCHESTRA_STATE_DIR:-$HOME/.orchestra-state}"
+CONFIG_FILE="$STATE_DIR/config.yaml"
+
+# Annotated header for new config files
+CONFIG_HEADER='# Orchestra configuration — edit freely, changes take effect on next skill run.
+#
+# ─── Behavior ────────────────────────────────────────────────────────
+# proactive: true           # Suggest checkpoints when user says "done", "looks good"
+#                           # Set to false to only checkpoint when explicitly asked
+#
+# heartbeat_auto: true      # Auto-schedule heartbeat checks every 30 min
+#                           # Set to false to disable automatic scheduling
+#
+# ─── Updates ─────────────────────────────────────────────────────────
+# update_check: true        # false = suppress version check notifications
+#
+'
+
+case "${1:-}" in
+  get)
+    KEY="${2:?Usage: orchestra-config get <key>}"
+    if ! printf '%s' "$KEY" | grep -qE '^[a-zA-Z0-9_]+$'; then
+      echo "Error: key must contain only alphanumeric characters and underscores" >&2
+      exit 1
+    fi
+    grep -E "^${KEY}:" "$CONFIG_FILE" 2>/dev/null | tail -1 | awk '{print $2}' | tr -d '[:space:]' || true
+    ;;
+  set)
+    KEY="${2:?Usage: orchestra-config set <key> <value>}"
+    VALUE="${3:?Usage: orchestra-config set <key> <value>}"
+    if ! printf '%s' "$KEY" | grep -qE '^[a-zA-Z0-9_]+$'; then
+      echo "Error: key must contain only alphanumeric characters and underscores" >&2
+      exit 1
+    fi
+    mkdir -p "$STATE_DIR"
+    if [ ! -f "$CONFIG_FILE" ]; then
+      printf '%s' "$CONFIG_HEADER" > "$CONFIG_FILE"
+    fi
+    ESC_VALUE="$(printf '%s' "$VALUE" | head -1 | sed 's/[&/\]/\\&/g')"
+    if grep -qE "^${KEY}:" "$CONFIG_FILE" 2>/dev/null; then
+      _tmpfile="$(mktemp "${CONFIG_FILE}.XXXXXX")"
+      sed "/^${KEY}:/s/.*/${KEY}: ${ESC_VALUE}/" "$CONFIG_FILE" > "$_tmpfile" && mv "$_tmpfile" "$CONFIG_FILE"
+    else
+      echo "${KEY}: ${VALUE}" >> "$CONFIG_FILE"
+    fi
+    ;;
+  list)
+    cat "$CONFIG_FILE" 2>/dev/null || echo "No config file yet. Run 'orchestra-config set <key> <value>' to create one."
+    ;;
+  *)
+    echo "Usage: orchestra-config {get|set|list} [key] [value]"
+    exit 1
+    ;;
+esac

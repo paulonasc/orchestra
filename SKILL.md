@@ -851,52 +851,13 @@ After automated tests pass (or for items that can't be automated), ask the user:
 
 ### Format
 
-```markdown
-# Verification: NNN-thread-name
-
-## Checklist
-- [x] Item from spec — PASS (automated)
-- [x] Visual layout correct — PASS (manual)
-- [ ] Another item — FAIL (see below)
-- [ ] Not yet tested — PENDING
-
-## Automated test results
-- `npm test`: 42 passed, 0 failed
-- `npm run typecheck`: clean
-- `npm run lint`: clean
-- API smoke test: POST /api/v1/compress → 200, job_id returned
-
-## Results
-
-### Item from spec
-**Status:** PASS
-**Method:** automated
-**How tested:** What command was run, what was checked
-**Date:** YYYY-MM-DD
-
-### Visual layout correct
-**Status:** PASS
-**Method:** manual
-**Tested by:** user
-**How tested:** User navigated to /compress, uploaded a file, confirmed progress bar renders
-**Date:** YYYY-MM-DD
-
-### Another item
-**Status:** FAIL
-**Method:** automated
-**How tested:** What was attempted
-**Failure:** What went wrong and why
-**Resolution:** How it was fixed (commit, file, change)
-**Retested:** PASS (YYYY-MM-DD)
-```
-
-### Rules
+Read `templates/thread-verification.md` for the verification document format. Key rules:
 
 - Checklist items map 1:1 to acceptance criteria in `spec.md`
 - **Always run Phase 1 (automated) first.** Do not ask the user to manually test things you can verify yourself.
 - Every FAIL must include: what happened, why, and how it was resolved
 - PENDING means not yet tested — work is not done
-- **Do NOT mark a progress item as `done` until all verification items PASS.** If you write a handoff saying "done" but `verification.md` has FAILs or PENDINGs, you did it wrong.
+- **Do NOT mark a progress item as `done` until all verification items PASS.**
 - Receiving agents should read `verification.md` to know what's validated vs just claimed
 
 ## Decisions
@@ -912,19 +873,7 @@ After automated tests pass (or for items that can't be automated), ask the user:
 - "Let's not do X" — rejected approaches are decisions too
 
 1. Look at existing files in `decisions/` to find the next sequential number
-2. Create `decisions/NNN-slug.md` with this format:
-
-```markdown
-# NNN: Decision Title
-
-**Date:** YYYY-MM-DD
-**Context:** Why this decision was needed
-**Decision:** What was decided
-**Alternatives:** What else was considered and why it was rejected
-**Reason:** Why this option over the alternatives
-**Risks:** Tradeoffs or risks of this choice
-**Affects:** What parts of the system this impacts
-```
+2. Create `decisions/NNN-slug.md` — read `templates/decision.md` for the format
 
 Decisions are append-only. Never edit or delete existing decision files.
 
@@ -946,42 +895,7 @@ Generate briefings when the user says "let's build it", "spawn agents", "generat
 
 ### What each briefing must contain
 
-Each briefing must be fully self-contained. The receiving agent reads only this file.
-
-```markdown
-# Task: [title]
-
-**Thread:** NNN-slug
-**Repo:** repo-name
-**Priority:** high/medium/low
-
-## Context
-What this is about and why it matters. Include relevant architecture decisions.
-
-## What to build
-Specific deliverables. Be precise about files, functions, interfaces.
-
-## Files to read first
-List the exact files the agent should read before starting.
-
-## Constraints
-- Performance requirements
-- Compatibility requirements
-- Patterns to follow
-
-## Tests required
-What tests to write. Specific scenarios to cover.
-
-## Verification
-Automated: test commands to run (unit tests, typecheck, lint, API smoke tests, browser QA).
-Manual: what the user should check and what context to report back.
-
-## When done
-- Update `verification.md` with test results — all items must PASS
-- Write handoff to `handoffs/`
-- Update the thread's `progress.yaml`
-- Update repo docs if your changes affect them (see Documentation below)
-```
+Each briefing must be fully self-contained. The receiving agent reads only this file. Read `templates/briefing.md` for the format.
 
 ## Handoffs
 
@@ -993,26 +907,7 @@ When you complete a significant chunk of work that another agent (or future sess
 
 ### Format
 
-```markdown
----
-from: repo-or-agent-name
-to: repo-or-agent-name
-thread: NNN-slug
-date: YYYY-MM-DD
----
-
-## What I built
-Concrete summary of changes. Files modified, APIs added, schemas changed.
-
-## What the next agent needs to know
-Breaking changes, new dependencies, updated interfaces, migration steps.
-
-## Decisions made
-Choices made during implementation and why.
-
-## Known issues
-Bugs, TODOs, shortcuts taken, things that need follow-up.
-```
+Read `templates/handoff.md` for the format. Sections: What I built, What the next agent needs to know, Decisions made, Known issues.
 
 Handoffs are append-only records. Never overwrite or delete them. Do not skip writing a handoff if you made changes another agent needs to know about.
 
@@ -1037,38 +932,7 @@ completed_at:           # ISO date, set when status changes to completed/abandon
 
 ### Format
 
-```yaml
-# threads/001-honestclaw-mvp/progress.yaml
-status: active
-milestones:
-  - name: M0
-    description: Scaffolding & CI/CD
-    items:
-      - name: API scaffold
-        status: done
-        repo: api
-      - name: Frontend scaffold
-        status: done
-        repo: frontend
-      - name: CI/CD pipelines
-        status: todo
-        repo: all
-  - name: M1
-    description: Core Features
-    items:
-      - name: Auth token rotation
-        status: blocked
-        repo: api
-        blocked_by: infrastructure team
-        reason: Waiting on new KMS key provisioning
-      - name: Integration tests
-        status: todo
-        repo: all
-```
-
-Each milestone has a `name`, `description` (human-readable). Each item has a `status`, `repo`, and optional `blocked_by`/`reason`.
-
-Valid statuses: `todo`, `in_progress`, `done`, `blocked`. Blocked items must include `blocked_by` and `reason`.
+YAML with milestones and items. Valid statuses: `todo`, `in_progress`, `done`, `blocked`. Blocked items must include `blocked_by` and `reason`. Each milestone has `name`, `description`. Each item has `status`, `repo`.
 
 ### Why per-thread?
 
@@ -1106,33 +970,11 @@ If you see a **CONCURRENT SESSIONS** warning at session start, be aware other ag
 
 ### Format
 
-```markdown
-# Session Context
-
-## Working on
-003-compress-video-pipeline — building ffmpeg transcode config
-
-## Key context
-- User wants 3 output resolutions: 1080p, 720p, 480p
-- Decided to use fluent-ffmpeg over raw child_process (decision 004)
-- API endpoint accepts multipart, returns job_id UUID
-
-## Current state
-- API route done, transcoder WIP — 720p/480p flags not added yet
-- verification.md: 1/3 PASS, 2 PENDING
-
-## Next steps
-- Add resolution array to transcode config
-- Test all 3 outputs
-- Write handoff to frontend
-```
-
-### Rules
+Read `templates/session.md` for the session context format. Sections: Working on, Key context, Current state, Next steps.
 
 - **Overwrite YOUR session file each time** — this is not a log, it's a snapshot of right now
 - Keep it under 50 lines — just enough to resume without loss
 - The PostCompact hook re-injects this file automatically after compaction
-- When the session ends, this file becomes stale — the session log and daily log are the durable records
 
 ### What triggers an update
 
@@ -1205,41 +1047,12 @@ Examples of what "now" means:
 
 ### Format
 
-```markdown
-# Backlog
+Read `templates/backlog.md` for the format. Three categories: Future improvements, Tech debt, Investigate.
 
-## Future improvements
-
-- **Structured identity graph from Instagram tags** — extract `taggedUsers` from JSONB into junction table for fast graph queries. All raw data preserved, can backfill anytime. Thread: `001-instagram-integration` | Priority: when identity graph becomes product focus
-
-- **Redis caching for API responses** — high-traffic endpoints hitting DB on every request. Thread: `003-api-performance` | Priority: before launch
-
-## Tech debt
-
-- **Duplicate email validation logic** — exists in both `lib/auth/` and `lib/onboarding/`. Should consolidate. Thread: `002-auth-migration` | Priority: low
-
-## Investigate
-
-- **WebSocket vs SSE for real-time updates** — currently polling every 10s. Worth investigating if user count grows. Thread: none | Priority: post-MVP
-```
-
-### Rules
-
-- **One line per item** — title, brief context, thread reference, priority. The thread has the full details.
-- **Always include `Thread: NNN-slug`** if the item came from a thread. This is the pointer back to full context.
-- **Three categories:** `Future improvements` (features to build), `Tech debt` (code to fix), `Investigate` (unknowns to research)
-- **Keep it under 50 items.** If it's growing past that, some items should become threads with plans.
-- **Remove items when they become threads.** Once work is actively planned, it moves from backlog to a thread — don't track in both places.
-
-### `/o` dashboard integration
-
-The `/o` dashboard should include a **Backlog** count in the footer when items exist:
-
-```
-📋 3 backlog items — see BACKLOG.md
-```
-
-Don't dump the full backlog into the dashboard — just surface the count. The backlog is reference material, not active work.
+- **One line per item** — title, brief context, thread reference, priority
+- **Keep it under 50 items.** If growing past that, items should become threads.
+- **Remove items when they become threads.** Don't track in both places.
+- The `/o` dashboard shows a backlog count in the footer when items exist.
 
 ## Agent Awareness — Staying Current Mid-Session
 

@@ -22,6 +22,7 @@ echo "$COUNT" > "$COUNTER_FILE"
 THRESHOLD=10
 if [ "$COUNT" -ge "$THRESHOLD" ]; then
   echo "Orchestra: $COUNT edits since last checkpoint. Run /o checkpoint to save progress."
+  echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"nudge_fired\",\"edit_count\":$COUNT}" >> "$ORCH_ROOT/.logs/telemetry.jsonl" 2>/dev/null || true
 fi
 
 exit 0

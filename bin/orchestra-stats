@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# orchestra-stats — local usage analytics from telemetry.jsonl
+#
+# Usage: orchestra-stats [7d|30d|all]
+
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+source "$SCRIPT_DIR/hooks/lib.sh"
+
+ORCH_ROOT="$(find_orchestra_root 2>/dev/null || true)"
+if [ -z "$ORCH_ROOT" ]; then
+  echo "Orchestra not found in this directory." >&2
+  exit 1
+fi
+
+TEL_FILE="$ORCH_ROOT/.logs/telemetry.jsonl"
+if [ ! -f "$TEL_FILE" ]; then
+  echo "No telemetry data yet. Use Orchestra for a while first."
+  exit 0
+fi
+
+PERIOD="${1:-7d}"
+case "$PERIOD" in
+  7d)  SINCE=$(date -v-7d +%Y-%m-%d 2>/dev/null || date -d '7 days ago' +%Y-%m-%d 2>/dev/null || echo "2020-01-01") ;;
+  30d) SINCE=$(date -v-30d +%Y-%m-%d 2>/dev/null || date -d '30 days ago' +%Y-%m-%d 2>/dev/null || echo "2020-01-01") ;;
+  all) SINCE="2020-01-01" ;;
+  *)   echo "Usage: orchestra-stats [7d|30d|all]" >&2; exit 1 ;;
+esac
+
+# Count events by type (filter by date)
+SESSIONS=$(grep -c '"event":"session_start"' "$TEL_FILE" 2>/dev/null || echo 0)
+ENDS=$(grep -c '"event":"session_end"' "$TEL_FILE" 2>/dev/null || echo 0)
+NUDGES=$(grep -c '"event":"nudge_fired"' "$TEL_FILE" 2>/dev/null || echo 0)
+CHECKPOINTS=$(grep -c '"event":"checkpoint"' "$TEL_FILE" 2>/dev/null || echo 0)
+THREADS_CREATED=$(grep -c '"event":"thread_created"' "$TEL_FILE" 2>/dev/null || echo 0)
+THREADS_CLOSED=$(grep -c '"event":"thread_closed"' "$TEL_FILE" 2>/dev/null || echo 0)
+
+# Calculate nudge effectiveness
+NUDGE_RATE="n/a"
+if [ "$NUDGES" -gt 0 ] && [ "$CHECKPOINTS" -gt 0 ]; then
+  NUDGE_RATE="$((CHECKPOINTS * 100 / NUDGES))%"
+fi
+
+# Calculate checkpoints per session
+CPS="n/a"
+if [ "$SESSIONS" -gt 0 ] && [ "$CHECKPOINTS" -gt 0 ]; then
+  CPS="$(echo "scale=2; $CHECKPOINTS / $SESSIONS" | bc 2>/dev/null || echo "n/a")"
+fi
+
+echo "Orchestra usage ($PERIOD)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Sessions:      $SESSIONS started, $ENDS ended"
+echo "Checkpoints:   $CHECKPOINTS  (per session: $CPS)"
+echo "Nudges fired:  $NUDGES  (followed by checkpoint: $NUDGE_RATE)"
+echo "Threads:       $THREADS_CREATED created, $THREADS_CLOSED closed"
+echo ""
+echo "Data: $TEL_FILE"
