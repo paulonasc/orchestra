@@ -27,6 +27,8 @@ description: |
 ## Preamble (run first)
 
 ```bash
+# Ensure global state directory exists (covers partial installs, manual copies)
+mkdir -p ~/.orchestra-state
 # Auto-sync: if source SKILL.md is newer than installed copy, re-install
 _ORCH_DIR="__ORCHESTRA_DIR__"
 _SRC="$_ORCH_DIR/SKILL.md"
