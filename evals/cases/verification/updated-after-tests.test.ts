@@ -1,10 +1,9 @@
 /**
- * Harder variant: Agent proactively updates verification.md when test results
- * are mentioned in passing, without being asked to record them.
+ * Case: Agent updates verification.md after user reports test results.
  *
- * The user reports test results as context while asking what to work on next.
- * The agent should recognize these as verification results and update
- * .orchestra/threads/<thread>/verification.md based on CLAUDE.md rules alone.
+ * The user tells the agent that tests passed and asks to save progress.
+ * The agent should update .orchestra/threads/<thread>/verification.md
+ * with PASS markers based on the test results.
  *
  * Uses deterministic file-on-disk checks, not an LLM judge.
  */
@@ -12,18 +11,18 @@
 import { expect } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { defineEvalSuite } from './helpers/harness';
-import { writeVerificationPending } from './helpers/fixtures';
-import { VERIFICATION_NO_EXPLICIT_INSTRUCTION } from './helpers/prompts';
+import { defineEvalSuite } from '../helpers/harness';
+import { writeVerificationPending } from '../helpers/fixtures';
+import { VERIFICATION_UPDATED_AFTER_TESTS } from '../helpers/prompts';
 
-defineEvalSuite('verification-no-explicit-instruction', [
+defineEvalSuite('verification-updated-after-tests', [
   {
-    name: 'agent proactively updates verification.md when test results are mentioned',
+    name: 'agent updates verification.md with PASS markers after tests pass',
     fixtures: async (env) => {
       await writeVerificationPending(env);
     },
     session: {
-      prompt: VERIFICATION_NO_EXPLICIT_INSTRUCTION,
+      prompt: VERIFICATION_UPDATED_AFTER_TESTS,
       maxTurns: 15,
       timeout: 180_000,
     },

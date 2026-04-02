@@ -10,8 +10,8 @@
  */
 
 import { expect } from 'bun:test';
-import { defineEvalSuite } from './helpers/harness';
-import { USER_SHIPPED_SUGGESTS_CLOSE } from './helpers/prompts';
+import { defineEvalSuite } from '../helpers/harness';
+import { USER_SHIPPED_SUGGESTS_CLOSE } from '../helpers/prompts';
 
 defineEvalSuite('user-shipped-suggests-close', [
   {

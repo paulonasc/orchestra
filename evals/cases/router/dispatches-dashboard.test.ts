@@ -9,7 +9,7 @@
  */
 
 import { expect } from 'bun:test';
-import { defineEvalSuite } from './helpers/harness';
+import { defineEvalSuite } from '../helpers/harness';
 
 defineEvalSuite('router-dispatches-dashboard', [
   {

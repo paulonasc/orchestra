@@ -7,9 +7,9 @@
  */
 
 import { expect } from 'bun:test';
-import { defineEvalSuite } from './helpers/harness';
-import { writeRateLimitingResearch } from './helpers/fixtures';
-import { CHECKPOINT_INCLUDES_RESEARCH } from './helpers/prompts';
+import { defineEvalSuite } from '../helpers/harness';
+import { writeRateLimitingResearch } from '../helpers/fixtures';
+import { CHECKPOINT_INCLUDES_RESEARCH } from '../helpers/prompts';
 
 defineEvalSuite('checkpoint-includes-research', [
   {

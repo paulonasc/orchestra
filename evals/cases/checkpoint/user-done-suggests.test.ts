@@ -10,9 +10,9 @@
  */
 
 import { expect } from 'bun:test';
-import { defineEvalSuite } from './helpers/harness';
-import { writeLoggerMiddlewareFixture } from './helpers/fixtures';
-import { USER_DONE_SUGGESTS_CHECKPOINT } from './helpers/prompts';
+import { defineEvalSuite } from '../helpers/harness';
+import { writeLoggerMiddlewareFixture } from '../helpers/fixtures';
+import { USER_DONE_SUGGESTS_CHECKPOINT } from '../helpers/prompts';
 
 defineEvalSuite('user-done-suggests-checkpoint', [
   {

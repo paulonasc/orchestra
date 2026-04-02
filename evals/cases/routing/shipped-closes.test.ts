@@ -9,8 +9,8 @@
  */
 
 import { expect } from 'bun:test';
-import { defineEvalSuite } from './helpers/harness';
-import { ROUTING_SHIPPED_CLOSES } from './helpers/prompts';
+import { defineEvalSuite } from '../helpers/harness';
+import { ROUTING_SHIPPED_CLOSES } from '../helpers/prompts';
 
 defineEvalSuite('routing-shipped-closes', [
   {

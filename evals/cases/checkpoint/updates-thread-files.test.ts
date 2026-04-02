@@ -13,9 +13,9 @@
 import { expect } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { defineEvalSuite } from './helpers/harness';
-import { writeAuthMigrationThread } from './helpers/fixtures';
-import { CHECKPOINT_UPDATES_THREAD_FILES } from './helpers/prompts';
+import { defineEvalSuite } from '../helpers/harness';
+import { writeAuthMigrationThread } from '../helpers/fixtures';
+import { CHECKPOINT_UPDATES_THREAD_FILES } from '../helpers/prompts';
 
 defineEvalSuite('checkpoint-updates-thread-files', [
   {

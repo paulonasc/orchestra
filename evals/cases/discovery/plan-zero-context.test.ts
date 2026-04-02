@@ -25,10 +25,10 @@
 import { describe, test, expect, afterAll } from 'bun:test';
 import { rm, unlink, readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createTestWorkDir, cleanupTestWorkDir } from './helpers/setup';
-import { runSession } from '../../evals/helpers/session-runner';
-import { createProvider } from '../../evals/helpers/providers';
-import { judgeBehavior, checkFileWrite } from '../../evals/helpers/judge';
+import { createTestWorkDir, cleanupTestWorkDir } from '../helpers/setup';
+import { runSession } from '../../../evals/helpers/session-runner';
+import { createProvider } from '../../../evals/helpers/providers';
+import { judgeBehavior, checkFileWrite } from '../../../evals/helpers/judge';
 
 // ---- Config ----
 

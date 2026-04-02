@@ -33,6 +33,16 @@ orchestra/
 ├── channels/             # multi-agent awareness rules per host
 ├── evals/
 │   ├── cases/            # behavioral evals (Agent SDK + LLM judge)
+│   │   ├── router/       # dispatch mechanism tests
+│   │   ├── checkpoint/   # writing, triggers, nudge tests
+│   │   ├── routing/      # CLAUDE.md routing rules
+│   │   ├── session/      # compaction, concurrent, context
+│   │   ├── discovery/    # zero-context, plan routing
+│   │   ├── decisions/    # recording, implicit
+│   │   ├── verification/ # updates, implicit
+│   │   ├── regressions/  # plan routing bugs
+│   │   ├── identity/     # agent knows Orchestra
+│   │   └── stats/        # telemetry command
 │   ├── helpers/          # session runner, judge, providers
 │   └── hooks/            # hook unit tests (bash)
 └── changelog/            # per-version changelogs
@@ -95,19 +105,37 @@ Evals use the Agent SDK (`@anthropic-ai/claude-agent-sdk`) to spawn sessions and
 
 ```bash
 # Run a single eval
-EVALS=1 bun test evals/cases/checkpoint-writes-correct-files.test.ts
+EVALS=1 bun test evals/cases/checkpoint/checkpoint-writes-correct-files.test.ts
 
-# Run all behavioral evals
+# Run all behavioral evals (recursive)
 EVALS=1 bun test evals/cases/
+
+# Run all evals in a category
+EVALS=1 bun test evals/cases/checkpoint/
 ```
 
 ### Adding a new eval
 
-1. Create `evals/cases/your-behavior.test.ts`
+1. Create `evals/cases/<category>/your-behavior.test.ts`
 2. Use the session runner from `evals/helpers/session-runner.ts`
 3. Use the judge from `evals/helpers/judge.ts` for pass/fail
 4. **Add provenance to the JSDoc header** (see format below)
-5. Test it: `EVALS=1 bun test evals/cases/your-behavior.test.ts`
+5. Test it: `EVALS=1 bun test evals/cases/<category>/your-behavior.test.ts`
+
+### Where to put new evals
+
+| If your eval tests... | Put it in |
+|----------------------|-----------|
+| Router dispatch (reads correct command file) | `evals/cases/router/` |
+| Checkpoint behavior (writing, triggers, nudge) | `evals/cases/checkpoint/` |
+| CLAUDE.md routing rules ("looks good" → action) | `evals/cases/routing/` |
+| Zero-context discovery, plan routing | `evals/cases/discovery/` |
+| Decision recording | `evals/cases/decisions/` |
+| Verification updates | `evals/cases/verification/` |
+| Agent identity/awareness | `evals/cases/identity/` |
+| Stats/telemetry commands | `evals/cases/stats/` |
+| Sessions, compaction, concurrency | `evals/cases/session/` |
+| Bug regressions | `evals/cases/regressions/` |
 
 ### Eval provenance (required)
 

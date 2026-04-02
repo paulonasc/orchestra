@@ -13,7 +13,7 @@ import { mkdtemp, rm, mkdir, writeFile, readFile, readdir } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const HOOKS_DIR = join(import.meta.dir, '..', '..', 'hooks');
+const HOOKS_DIR = join(import.meta.dir, '..', '..', '..', 'hooks');
 
 let workDir: string | undefined;
 

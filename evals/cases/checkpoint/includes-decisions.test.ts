@@ -8,9 +8,9 @@
  */
 
 import { expect } from 'bun:test';
-import { defineEvalSuite } from './helpers/harness';
-import { writeCachingDecision } from './helpers/fixtures';
-import { CHECKPOINT_INCLUDES_DECISIONS } from './helpers/prompts';
+import { defineEvalSuite } from '../helpers/harness';
+import { writeCachingDecision } from '../helpers/fixtures';
+import { CHECKPOINT_INCLUDES_DECISIONS } from '../helpers/prompts';
 
 defineEvalSuite('checkpoint-includes-decisions', [
   {

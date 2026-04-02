@@ -15,7 +15,7 @@ import { rm, mkdir, writeFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const HOOKS_DIR = join(import.meta.dir, '..', '..', 'hooks');
+const HOOKS_DIR = join(import.meta.dir, '..', '..', '..', 'hooks');
 
 let parentDir: string | undefined;
 
