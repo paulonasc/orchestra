@@ -146,6 +146,34 @@ Run \`/o\` in Claude Code for the full dashboard.
     .replace(/__ORCHESTRA_DIR__/g, ORCHESTRA_SRC);
   await writeFile(join(skillDir, 'SKILL.md'), installedSkill);
 
+  // Copy command files (subcommand instructions)
+  const commandsDir = join(skillDir, 'commands');
+  await mkdir(commandsDir, { recursive: true });
+  const commandFiles = ['dashboard.md', 'checkpoint.md', 'close.md', 'import.md', 'docs.md', 'heartbeat.md', 'list.md', 'update.md'];
+  for (const file of commandFiles) {
+    const src = join(ORCHESTRA_SRC, 'commands', file);
+    try {
+      const content = await readFile(src, 'utf-8');
+      await writeFile(join(commandsDir, file), content);
+    } catch {
+      // File may not exist in older versions — skip silently
+    }
+  }
+
+  // Copy reference files (shared docs)
+  const referenceDir = join(skillDir, 'reference');
+  await mkdir(referenceDir, { recursive: true });
+  const referenceFiles = ['memory.md', 'threads.md', 'verification.md', 'formats.md'];
+  for (const file of referenceFiles) {
+    const src = join(ORCHESTRA_SRC, 'reference', file);
+    try {
+      const content = await readFile(src, 'utf-8');
+      await writeFile(join(referenceDir, file), content);
+    } catch {
+      // File may not exist in older versions — skip silently
+    }
+  }
+
   // Install .claude/settings.json with hooks (including PostToolUse nudge)
   const settings = {
     permissions: {
