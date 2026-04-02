@@ -241,14 +241,15 @@ _replace_rules_block() {
 inject_instruction_rules() {
   local repo="$1"
 
-  # Claude Code — CLAUDE.md
+  # Claude Code — CLAUDE.md (create if missing)
   local claude_md="$repo/CLAUDE.md"
-  if [ -f "$claude_md" ]; then
-    if _replace_rules_block "$claude_md"; then
-      echo "  Updated Orchestra rules in CLAUDE.md"
-    else
-      echo "  Injected Orchestra rules into CLAUDE.md"
-    fi
+  if [ ! -f "$claude_md" ]; then
+    orchestra_rules_block > "$claude_md"
+    echo "  Created CLAUDE.md with Orchestra rules"
+  elif _replace_rules_block "$claude_md"; then
+    echo "  Updated Orchestra rules in CLAUDE.md"
+  else
+    echo "  Injected Orchestra rules into CLAUDE.md"
   fi
 
   # Codex — AGENTS.md
