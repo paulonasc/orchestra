@@ -41,7 +41,7 @@ Agents read and write these files. Hooks auto-inject context at session start. T
 | Agent forgets to update state | You remind it every 30 min | Mechanical nudge after 10 edits + pattern-match triggers |
 | Frontend agent gets API noise | Shared context dumps everything | Repo-aware filtering — each agent sees only relevant memory |
 
-## Install
+## Install — 30 seconds
 
 **Step 1:** Clone Orchestra.
 
@@ -49,20 +49,20 @@ Agents read and write these files. Hooks auto-inject context at session start. T
 git clone https://github.com/paulonasc/orchestra.git ~/orchestra
 ```
 
-**Step 2:** Run the guided setup.
+**Step 2:** Open Claude Code and paste this:
 
-```bash
-cd ~/orchestra && ./setup install
-```
-
-Orchestra will ask which project to coordinate, create the `.orchestra/` state directory, install hooks, and inject the `/o` skill. Done.
+> Set up Orchestra. It's installed at `~/orchestra`. Run `~/orchestra/setup install` and ask me which project to coordinate. After setup, type `/o` to show the dashboard.
 
 ### Manual setup
 
 ```bash
 git clone https://github.com/paulonasc/orchestra.git ~/orchestra
+
+# Create .orchestra/ and link your project
 ~/orchestra/setup init ~/Projects/my-app
 ~/orchestra/setup link ~/Projects/my-app
+
+# Link additional repos to the same .orchestra/
 ~/orchestra/setup link ~/Projects/my-api
 ```
 
