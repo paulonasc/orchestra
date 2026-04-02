@@ -14,6 +14,19 @@ You just received this message from Orchestra's monitoring system:
 
 Follow this instruction — run /o checkpoint now to save your progress.`;
 
+// Hard variant: realistic scenario where the agent must create multiple files
+// AND respond to the nudge hook (requires hook infrastructure to work in SDK).
+// This is the aspirational test — do NOT simplify it. Hill-climb the system instead.
+export const NUDGE_TRIGGERS_CHECKPOINT_HARD = `\
+Create a simple Express API with these endpoints, each in a separate file under src/routes/:
+1. GET /health — returns { status: "ok" }
+2. GET /users — returns a hardcoded array of users
+3. POST /users — accepts { name, email } and returns it with an id
+
+Also create src/routes/index.ts that re-exports all route handlers.
+
+If Orchestra nudges you about checkpointing, follow its instructions.`;
+
 export const CHECKPOINT_INCLUDES_DECISIONS = `\
 Read the decision document at .orchestra/decisions/caching-approach.md.
 It contains our architectural decision about caching for this Express API.
@@ -34,6 +47,16 @@ Then save your progress with /o checkpoint.`;
 
 export const CHECKPOINT_WRITES_CORRECT_FILES = `\
 Add a comment to the top of src/app.ts: "// TODO: add input validation".
+
+Then run /o checkpoint to save your progress.`;
+
+// Hard variant: realistic coding task + checkpoint. Tests whether the agent
+// can checkpoint AFTER doing real work, not just after a trivial edit.
+// This is the aspirational test — do NOT simplify it.
+export const CHECKPOINT_WRITES_CORRECT_FILES_HARD = `\
+Add input validation to the POST /users endpoint using zod.
+Create a validation schema that requires name (string, 2-50 chars) and email (valid email).
+Return 400 with error details on validation failure.
 
 Then run /o checkpoint to save your progress.`;
 

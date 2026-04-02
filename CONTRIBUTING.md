@@ -150,6 +150,20 @@ Origin types:
 
 This takes 1 line to add but makes a huge difference when deciding whether to keep, modify, or delete an eval during refactors.
 
+### Eval integrity — do NOT weaken tests to make them pass
+
+**Evals exist to push the system forward.** The fact that a test is hard is exactly why it exists. When an eval fails, the correct response is to improve the system (prompts, SKILL.md, hooks, architecture) — not to simplify the test.
+
+Rules:
+- **Never simplify an eval prompt** to make it pass unless the original prompt was testing the wrong thing
+- **Never change assertions** to accept weaker behavior unless the original assertion was incorrect
+- **Hard variants (`*-hard.test.ts`) must NEVER be modified to pass.** They represent the realistic scenario. Improve the system until they pass.
+- **Baseline variants** test the minimum behavior and should always pass. These gate releases.
+- When a hard test fails, treat it as a signal: "our system isn't good enough yet for this case"
+- Document WHY you changed an eval if you ever modify one — in the commit message AND the JSDoc
+
+The goal is to **hill-climb**: make the system better until hard evals pass, not make evals easier until they pass on a weak system.
+
 ## Working on hooks
 
 Hook scripts live in `hooks/` and are installed into each linked repo's `.claude/settings.json`. They fire on Claude Code lifecycle events:
