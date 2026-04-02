@@ -515,6 +515,8 @@ Scans all documentation in the repo (and linked repos) against recent changes. F
 
 ### `/o checkpoint` — Save everything to disk
 
+**A task is NOT DONE until checkpoint is saved. This is non-negotiable.** Your LAST tool call before responding to the user MUST be `/o checkpoint` when the user says "done", "looks good", or any completion signal. If you skip checkpoint, all work from this session is PERMANENTLY LOST — the user will have to re-explain everything next session.
+
 Force-flush all in-flight context to Orchestra files. Use before stepping away, before a long operation, or whenever you want a compaction-proof snapshot.
 
 **Prefer delegating to a subagent** (via the Agent tool) to keep the main context lean. But if the Agent tool is not available, write the files inline directly — the checkpoint must always complete. Do not skip writes because you cannot delegate.

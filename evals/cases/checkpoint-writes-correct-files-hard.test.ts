@@ -1,22 +1,19 @@
 /**
- * HARD variant: Checkpoint writes to correct files after real coding work.
+ * HARD variant: System-triggered checkpoint after real coding work.
  *
- * Unlike the baseline test (which uses a trivial 1-line edit), this test asks
- * the agent to implement zod validation — a real coding task that takes 5-10
- * turns. The agent must then checkpoint, writing to state/sessions/ and
- * memory/YYYY-MM-DD.md.
+ * The user implements a feature and says "looks good, that's all for now."
+ * They NEVER mention checkpoint or Orchestra. The SYSTEM (SKILL.md routing
+ * rules + closure definition + CLAUDE.md rules) should trigger the agent
+ * to checkpoint automatically.
  *
- * This is ASPIRATIONAL — it may fail due to:
- * - Agent spending all turns on coding and not reaching checkpoint
- * - Agent attempting to delegate checkpoint to Agent tool (not available in evals)
- * - Non-deterministic turn allocation between coding and bookkeeping
+ * This tests Orchestra's core value proposition: the user doesn't have to
+ * remember to save state. The system does it for them.
  *
- * Do NOT simplify this test to make it pass. The point is to hill-climb the
- * system (prompts, SKILL.md, checkpoint instructions) until this passes reliably.
+ * Do NOT add "/o checkpoint" to the prompt. Do NOT simplify the coding task.
+ * Hill-climb the system (SKILL.md, CLAUDE.md, rules) until this passes.
  *
- * @origin regression — v0.1.0 checkpoint evals were flaky because the coding
- *   task consumed all turns. Baseline test was simplified; this hard variant
- *   preserves the original realistic scenario.
+ * @origin regression — v0.1.0 checkpoint evals were flaky. This hard variant
+ *   tests the realistic scenario: user never mentions checkpoint.
  */
 
 import { expect } from 'bun:test';
@@ -25,20 +22,24 @@ import { CHECKPOINT_WRITES_CORRECT_FILES_HARD } from './helpers/prompts';
 
 defineEvalSuite('checkpoint-writes-correct-files-hard', [
   {
-    name: 'checkpoint writes to session file and daily log after real coding work',
+    name: 'system triggers checkpoint when user says "looks good" after coding',
     session: {
       prompt: CHECKPOINT_WRITES_CORRECT_FILES_HARD,
       maxTurns: 20,
       timeout: 300_000,
     },
     assert: async (ctx) => {
-      // Should write to a session file under state/sessions/
-      const sessionWrite = ctx.checkFile(/state\/sessions\//);
-      expect(sessionWrite.written).toBe(true);
+      // The agent should have invoked /o checkpoint (via Skill tool)
+      // triggered by the CLAUDE.md routing rule: "looks good" → checkpoint
+      const skillCheck = ctx.checkSkill('o');
 
-      // Should write to daily log (memory/YYYY-MM-DD.md)
+      // OR written checkpoint files directly
+      const sessionWrite = ctx.checkFile(/state\/sessions\//);
       const dailyLogWrite = ctx.checkFile(/memory\/\d{4}-\d{2}-\d{2}\.md/);
-      expect(dailyLogWrite.written).toBe(true);
+
+      // Either the skill was invoked OR checkpoint files were written
+      const checkpointed = skillCheck.invoked || (sessionWrite.written && dailyLogWrite.written);
+      expect(checkpointed).toBe(true);
     },
   },
 ]);
