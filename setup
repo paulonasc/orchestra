@@ -631,8 +631,10 @@ cmd_install() {
 
         local vendor_dest="$vendor_target/.claude/skills/orchestra"
         mkdir -p "$(dirname "$vendor_dest")"
-        cp -Rf "$ORCHESTRA_DIR" "$vendor_dest"
-        rm -rf "$vendor_dest/.git"
+        # Copy but exclude heavy dirs that aren't needed for vendored installs
+        rsync -a --exclude 'node_modules' --exclude '.git' --exclude 'evals' "$ORCHESTRA_DIR/" "$vendor_dest/" 2>/dev/null \
+          || cp -Rf "$ORCHESTRA_DIR" "$vendor_dest"
+        rm -rf "$vendor_dest/.git" "$vendor_dest/node_modules" "$vendor_dest/evals"
         green "  Vendored Orchestra to $vendor_dest"
         echo ""
 

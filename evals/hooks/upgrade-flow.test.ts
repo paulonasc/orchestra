@@ -89,13 +89,11 @@ describe('upgrade-flow', () => {
     const versionMarker = join(process.env.HOME || '', '.orchestra-state', '.version');
     // Note: this test checks the REAL ~/.orchestra-state/.version
     // It may already exist from a real install — just verify it exists and has content
-    try {
+    const versionExists = await exists(versionMarker);
+    expect(versionExists).toBe(true);
+    if (versionExists) {
       const version = await readFile(versionMarker, 'utf-8');
       expect(version.trim().length).toBeGreaterThan(0);
-    } catch {
-      // If the marker doesn't exist, stamp_version wasn't called — that's a failure
-      // But only if our setup link actually ran (which it did in the previous test)
-      // Skip this assertion if running in CI without a real home dir
     }
   });
 });
