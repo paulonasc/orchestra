@@ -26,6 +26,12 @@ CONFIG_HEADER='# Orchestra configuration — edit freely, changes take effect on
 # ─── Updates ─────────────────────────────────────────────────────────
 # update_check: true        # false = suppress version check notifications
 #
+# ─── Telemetry ───────────────────────────────────────────────────────
+# telemetry: off              # off | anonymous | community
+#                             #   off       — no data sent
+#                             #   anonymous — counters only, no device ID
+#                             #   community — usage data + stable device ID
+#
 '
 
 case "${1:-}" in
