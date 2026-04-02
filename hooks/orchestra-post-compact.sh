@@ -57,4 +57,7 @@ echo "- Read .orchestra/ files only when you need specific details"
 echo "- Record decisions, update docs, log to daily file as you work"
 echo ""
 
+# Telemetry: post-compact event
+echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"hook_post_compact\"}" >> "$ORCH_ROOT/.logs/telemetry.jsonl" 2>/dev/null || true
+
 exit 0

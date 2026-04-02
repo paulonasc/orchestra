@@ -55,10 +55,24 @@ CREATE TABLE installations (
   os TEXT
 );
 
--- Row Level Security: publishable key can only INSERT, never read.
+-- Row Level Security: publishable key can only INSERT valid rows, never read.
 -- All reads go through edge functions using service_role key.
 ALTER TABLE telemetry_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE installations ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "insert_events" ON telemetry_events FOR INSERT WITH CHECK (true);
-CREATE POLICY "insert_installs" ON installations FOR INSERT WITH CHECK (true);
+-- Tighter than WITH CHECK (true) — enforces required fields at the database level.
+-- Belt and suspenders: edge function validates too, but this catches direct REST API posts.
+CREATE POLICY "insert_events" ON telemetry_events FOR INSERT
+  WITH CHECK (
+    orchestra_version IS NOT NULL
+    AND os IS NOT NULL
+    AND event IS NOT NULL
+    AND event_timestamp IS NOT NULL
+    AND schema_version = 1
+  );
+
+CREATE POLICY "insert_installs" ON installations FOR INSERT
+  WITH CHECK (
+    installation_id IS NOT NULL
+    AND installation_id <> ''
+  );
