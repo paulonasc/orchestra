@@ -19,6 +19,8 @@ orchestra/
 ├── VERSION               # single source of truth for version
 ├── setup                 # init, link, sync commands
 ├── bin/
+│   ├── orchestra-config        # read/write ~/.orchestra-state/config.yaml
+│   ├── orchestra-telemetry-sync # upload local telemetry to Supabase
 │   ├── orchestra-update-check
 │   └── orchestra-changelog
 ├── hooks/                # bash hooks for Claude Code lifecycle
@@ -44,7 +46,11 @@ orchestra/
 │   │   ├── identity/     # agent knows Orchestra
 │   │   └── stats/        # telemetry command
 │   ├── helpers/          # session runner, judge, providers
-│   └── hooks/            # hook unit tests (bash)
+│   └── hooks/            # hook unit tests (bash) + telemetry pipeline e2e
+├── supabase/
+│   ├── functions/        # edge functions (telemetry-ingest)
+│   ├── migrations/       # database schema
+│   └── config.sh         # public Supabase URL + key
 └── changelog/            # per-version changelogs
 ```
 

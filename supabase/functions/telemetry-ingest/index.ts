@@ -18,9 +18,11 @@ const MAX_PAYLOAD_BYTES = 50 * 1024; // 50KB
 
 // Valid event types
 const VALID_EVENTS = new Set([
-  // Hook events
-  "hook_session_start", "hook_pre_compact", "hook_post_compact",
-  "hook_nudge_fired", "hook_stop", "hook_subagent_stop",
+  // Hook events (accept both prefixed and unprefixed forms)
+  "hook_session_start", "session_start",
+  "hook_pre_compact", "hook_post_compact",
+  "hook_nudge_fired", "nudge_fired",
+  "hook_stop", "hook_subagent_stop",
   // Command events
   "cmd_checkpoint", "cmd_close", "cmd_dashboard", "cmd_import",
   "cmd_docs", "cmd_heartbeat", "cmd_update",
@@ -78,9 +80,13 @@ Deno.serve(async (req: Request) => {
   // Validate and transform events
   const validRows: Record<string, unknown>[] = [];
   const installUpserts: Map<string, Record<string, unknown>> = new Map();
+  const dropReasons: string[] = [];
 
   for (const raw of events) {
-    if (typeof raw !== "object" || raw === null) continue;
+    if (typeof raw !== "object" || raw === null) {
+      dropReasons.push("invalid_format");
+      continue;
+    }
     const e = raw as Record<string, unknown>;
 
     // Required fields
@@ -89,15 +95,25 @@ Deno.serve(async (req: Request) => {
     const os = e.os;
     const event = e.event;
 
-    if (!ts || !version || !os || !event) continue;
+    if (!ts || !version || !os || !event) {
+      const missing = [!ts && "ts", !version && "orchestra_version", !os && "os", !event && "event"].filter(Boolean);
+      dropReasons.push(`missing: ${missing.join(",")}`);
+      continue;
+    }
 
     // Schema version check (silently drop unknown)
     const schemaVersion = typeof e.v === "number" ? e.v : (typeof e.schema_version === "number" ? e.schema_version : 1);
-    if (schemaVersion !== 1) continue;
+    if (schemaVersion !== 1) {
+      dropReasons.push(`unsupported_schema: ${schemaVersion}`);
+      continue;
+    }
 
     // Event type validation
     const eventStr = truncate(event, 50)!;
-    if (!VALID_EVENTS.has(eventStr)) continue;
+    if (!VALID_EVENTS.has(eventStr)) {
+      dropReasons.push(`unknown_event: ${eventStr}`);
+      continue;
+    }
 
     // Build validated row
     const row: Record<string, unknown> = {
@@ -134,7 +150,8 @@ Deno.serve(async (req: Request) => {
   }
 
   if (validRows.length === 0) {
-    return new Response(JSON.stringify({ inserted: 0 }), {
+    const dropped = events.length - validRows.length;
+    return new Response(JSON.stringify({ inserted: 0, dropped, reasons: [...new Set(dropReasons)] }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
@@ -160,7 +177,10 @@ Deno.serve(async (req: Request) => {
       .upsert(install, { onConflict: "installation_id" });
   }
 
-  return new Response(JSON.stringify({ inserted: validRows.length }), {
+  const dropped = events.length - validRows.length;
+  const resp: Record<string, unknown> = { inserted: validRows.length, dropped };
+  if (dropped > 0) resp.reasons = [...new Set(dropReasons)];
+  return new Response(JSON.stringify(resp), {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
