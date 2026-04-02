@@ -107,9 +107,9 @@ You are an AI agent using Orchestra — a file-based coordination system. You re
 
 Orchestra state updates (checkpoint, docs audit, daily logs, MEMORY.md, progress.yaml, conversation.md, verification.md) are expensive: they read multiple files, write multiple files, and generate verbose output — all of which consumes the main context window. Over a session, this overhead compounds and accelerates compaction.
 
-**Rule: When an Orchestra operation needs to read/write 3+ files, delegate it to a background subagent via the Agent tool.**
+**Rule: When an Orchestra operation needs to read/write 3+ files, prefer delegating to a background subagent via the Agent tool.** If the Agent tool is not available, write the files inline directly — never skip writes because delegation is unavailable.
 
-The subagent gets a focused prompt, does all the file I/O in its own context, and returns a one-line summary. The main context only sees the summary — not the file contents, not the diffs, not the intermediate reads.
+When delegation is available, the subagent gets a focused prompt, does all the file I/O in its own context, and returns a one-line summary. The main context only sees the summary — not the file contents, not the diffs, not the intermediate reads.
 
 **Pattern:**
 
@@ -517,9 +517,9 @@ Scans all documentation in the repo (and linked repos) against recent changes. F
 
 Force-flush all in-flight context to Orchestra files. Use before stepping away, before a long operation, or whenever you want a compaction-proof snapshot.
 
-**IMPORTANT: Delegate to a subagent.** Checkpoint writes multiple files — doing this inline consumes significant context. Follow the "Context budget" pattern above: spawn a background Agent with all the context it needs, let it do the writes, get back a one-line summary.
+**Prefer delegating to a subagent** (via the Agent tool) to keep the main context lean. But if the Agent tool is not available, write the files inline directly — the checkpoint must always complete. Do not skip writes because you cannot delegate.
 
-**Before spawning the checkpoint subagent, answer each category:**
+**Before writing, answer each category:**
 
 - **Code:** What files did you create or edit?
 - **Decisions:** What architectural, tool, or approach decisions did you make (and why)?
@@ -529,9 +529,9 @@ Force-flush all in-flight context to Orchestra files. Use before stepping away, 
 - **Progress:** Which milestone items are now done, in-progress, or blocked?
 - **Next:** What should happen next?
 
-Write down your answers (they become the subagent prompt). The subagent has no conversation context — your answers ARE its context. Be thorough here — this is what survives compaction.
+Write down your answers — they become the subagent prompt (or your own writing guide if doing it inline). Be thorough — this is what survives compaction.
 
-**What the subagent writes:**
+**Files to write (all paths relative to `.orchestra/`):**
 
 1. **`state/sessions/{session-id}.md`** — session state snapshot. Fill in every section: Working on, Progress updates, Decisions made, Research findings, Gotchas, Next steps.
 2. **`threads/NNN-slug/progress.yaml`** — update item statuses to reflect reality. Mark completed items as `done`, new work as `in-progress`.
@@ -541,12 +541,12 @@ Write down your answers (they become the subagent prompt). The subagent has no c
 6. **`decisions/NNN-slug.md`** — new decision files for any decisions made this session. Use unique filenames (next available number + descriptive slug) so concurrent agents never collide.
 7. **`MEMORY.md`** — durable learnings (gotchas, patterns, preferences). Append new entries; never overwrite existing ones.
 
-After the subagent returns, reset the edit counter and confirm to the user:
+After writing (or after the subagent returns), reset the edit counter and confirm to the user:
 ```bash
 echo 0 > .orchestra/.logs/edit-count-{session-id}
 ```
 ```
-Checkpoint saved (via subagent):
+Checkpoint saved:
   ✓ session file, daily log, thread files updated
   ✓ {N} decision(s) recorded (if any)
 ```
