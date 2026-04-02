@@ -46,7 +46,7 @@ Agents read and write these files. Hooks auto-inject context at session start. T
 **Step 1:** Clone Orchestra.
 
 ```bash
-git clone https://github.com/orchestrahq/orchestra.git ~/orchestra
+git clone https://github.com/paulonasc/orchestra.git ~/orchestra
 ```
 
 **Step 2:** Run the guided setup.
@@ -60,7 +60,7 @@ Orchestra will ask which project to coordinate, create the `.orchestra/` state d
 ### Manual install
 
 ```bash
-git clone https://github.com/orchestrahq/orchestra.git ~/orchestra
+git clone https://github.com/paulonasc/orchestra.git ~/orchestra
 
 # Create .orchestra/ at your project root
 ~/orchestra/setup init ~/Projects/my-app

@@ -55,7 +55,7 @@ export async function createTestWorkDir(name: string): Promise<TestWorkDir> {
     join(orchestra, 'README.md'),
     `# .orchestra/ — Multi-agent coordination state
 
-This directory is managed by [Orchestra](https://github.com/orchestrahq/orchestra).
+This directory is managed by [Orchestra](https://github.com/paulonasc/orchestra).
 
 ## For AI agents
 

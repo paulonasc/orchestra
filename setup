@@ -110,7 +110,7 @@ BLEOF
     cat > "$orch_dir/README.md" << 'DISCOVERY_EOF'
 # .orchestra/ — Multi-agent coordination state
 
-This directory is managed by [Orchestra](https://github.com/orchestrahq/orchestra).
+This directory is managed by [Orchestra](https://github.com/paulonasc/orchestra).
 
 ## For AI agents
 
