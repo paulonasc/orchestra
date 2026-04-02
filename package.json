@@ -7,7 +7,10 @@
     "test:hooks": "bun test evals/hooks/",
     "test:evals": "EVALS=1 bun test evals/cases/",
     "eval": "EVALS=1 bun test evals/cases/",
-    "lint": "eslint evals/ --ext .ts"
+    "lint": "eslint evals/ --ext .ts",
+    "gen:skill": "bun scripts/gen-skill.ts",
+    "gen:skill:check": "bun scripts/gen-skill.ts --dry-run",
+    "gen:skill:full": "bun scripts/gen-skill.ts --full"
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.83",
