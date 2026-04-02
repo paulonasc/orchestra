@@ -400,8 +400,13 @@ cmd_link() {
   sed -e "s|__ORCHESTRA_BIN__|${ORCHESTRA_DIR}/bin|g" \
       -e "s|__ORCHESTRA_DIR__|${ORCHESTRA_DIR}|g" \
     "$ORCHESTRA_DIR/SKILL.md" > "$repo_path/.claude/skills/o/SKILL.md"
-  # Command files (subcommand instructions)
-  cp "$ORCHESTRA_DIR/commands/"*.md "$repo_path/.claude/skills/o/commands/" 2>/dev/null || true
+  # Command files (subcommand instructions) — with path substitution
+  for cmd_file in "$ORCHESTRA_DIR/commands/"*.md; do
+    [ -f "$cmd_file" ] || continue
+    sed -e "s|__ORCHESTRA_BIN__|${ORCHESTRA_DIR}/bin|g" \
+        -e "s|__ORCHESTRA_DIR__|${ORCHESTRA_DIR}|g" \
+      "$cmd_file" > "$repo_path/.claude/skills/o/commands/$(basename "$cmd_file")"
+  done
   # Reference files (shared docs)
   cp "$ORCHESTRA_DIR/reference/"*.md "$repo_path/.claude/skills/o/reference/" 2>/dev/null || true
   echo "  Installed skill pack to .claude/skills/o/ (router + commands/ + reference/)"
