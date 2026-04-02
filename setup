@@ -373,7 +373,11 @@ cmd_link() {
   cat > "$repo_path/.claude/rules/orchestra.md" << 'RULESEOF'
 This project uses Orchestra for coordination. State lives in .orchestra/.
 
-When asked to write a plan, write it to .orchestra/threads/<thread>/plan.md.
+MANDATORY: When the user signals completion ("done", "looks good", "that's working",
+"all set", "that's all", "nice work"), invoke /o checkpoint BEFORE responding.
+This is your LAST tool call before any text response. State is lost if you skip this.
+
+Plans go in .orchestra/threads/<thread>/plan.md.
 Check .orchestra/state/active-thread.md for the active thread name.
 Decisions go in .orchestra/decisions/NNN-slug.md.
 Research goes in .orchestra/threads/<thread>/research.md.

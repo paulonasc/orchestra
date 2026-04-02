@@ -8,10 +8,12 @@ description: |
   Multi-agent coordination through files. Memory, threads, progress, handoffs.
   Use when asked to "save progress", "checkpoint", "what's the status",
   "hand off", "what are we working on", or "close the thread".
-  Proactively suggest /o checkpoint when: the user says "done", "that's working",
-  "looks good", or "all set"; a milestone is completed; before spawning
-  implementation subagents; or after a long coding stretch without saving.
-  Proactively suggest /o close when the user says "merged", "shipped", or "deployed".
+  MANDATORY: When the user signals completion ("done", "that's working",
+  "looks good", "all set", "that's all", "nice work", "ship it"), you MUST
+  invoke /o checkpoint BEFORE responding. Not after. BEFORE. This is your
+  LAST tool call before any text response. If you skip this, session state
+  is permanently lost. Do not just acknowledge the user — save state first.
+  MANDATORY: When the user says "merged", "shipped", or "deployed", invoke /o close.
   When the user says "document this", "write a plan", "plan this out", or "record
   this decision": write to .orchestra/threads/<active-thread>/plan.md for plans,
   .orchestra/decisions/NNN-slug.md for decisions, .orchestra/threads/<active-thread>/
