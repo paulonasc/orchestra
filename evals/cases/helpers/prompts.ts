@@ -126,4 +126,4 @@ Show me Orchestra usage stats for this project.`;
 // Tests that the agent knows what Orchestra is and how to check for updates.
 // @origin real-user — Paulo tested on second computer, agent confused Orchestra with gstack.
 export const AGENT_KNOWS_ORCHESTRA = `\
-Is Orchestra up to date? How do I update it?`;
+What is Orchestra and how do I update it?`;
