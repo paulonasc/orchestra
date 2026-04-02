@@ -41,6 +41,8 @@ Agents read and write these files. Hooks auto-inject context at session start. T
 | Agent forgets to update state | You remind it every 30 min | Mechanical nudge after 10 edits + pattern-match triggers |
 | Frontend agent gets API noise | Shared context dumps everything | Repo-aware filtering — each agent sees only relevant memory |
 
+<img width="1536" height="1024" alt="full-orchestra-logo" src="https://github.com/user-attachments/assets/3dfd7eae-b4cb-4fde-aa63-f55d5ae1a25f" />
+
 ## Install — 30 seconds
 
 **Step 1:** Clone Orchestra.
