@@ -29,6 +29,6 @@ THREAD_NAME="${THREAD_NAME:-no active thread}"
 
 echo "  · Subagent ($AGENT_TYPE) completed for thread: $THREAD_NAME" >> "$ORCH_ROOT/memory/$TODAY.md"
 
-echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"hook_subagent_stop\"}" >> "$ORCH_ROOT/.logs/telemetry.jsonl" 2>/dev/null || true
+echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"hook_subagent_stop\",\"session_id\":\"$(get_session_id)\"}" >> "$ORCH_ROOT/.logs/telemetry.jsonl" 2>/dev/null || true
 
 exit 0

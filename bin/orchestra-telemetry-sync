@@ -124,12 +124,12 @@ curl -sf --max-time 30 \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${REMOTE_KEY}" \
   -H "apikey: ${REMOTE_KEY}" \
-  -d "$BATCH" || sleep 2 && curl -sf --max-time 30 \
+  -d "$BATCH" || { sleep 2; curl -sf --max-time 30 \
   -X POST "${REMOTE_URL}/functions/v1/telemetry-ingest" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${REMOTE_KEY}" \
   -H "apikey: ${REMOTE_KEY}" \
-  -d "$BATCH"
+  -d "$BATCH"; }
 HTTP_CODE="$?"
 # Map curl exit code: 0 = success
 if [ "$HTTP_CODE" -eq 0 ]; then HTTP_CODE=200; else HTTP_CODE=000; fi

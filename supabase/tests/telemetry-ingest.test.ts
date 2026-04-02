@@ -10,7 +10,7 @@
 
 import { describe, test, expect } from "bun:test";
 
-// Replicate the validation logic from the edge function
+// KEEP IN SYNC with supabase/functions/telemetry-ingest/index.ts
 const VALID_EVENTS = new Set([
   "hook_session_start", "hook_pre_compact", "hook_post_compact",
   "hook_nudge_fired", "hook_stop", "hook_subagent_stop",
@@ -27,6 +27,7 @@ function truncate(val: unknown, maxLen: number): string | null {
   return s.length > maxLen ? s.slice(0, maxLen) : s;
 }
 
+// KEEP IN SYNC with supabase/functions/telemetry-ingest/index.ts
 function validateEvent(raw: unknown): Record<string, unknown> | null {
   if (typeof raw !== "object" || raw === null) return null;
   const e = raw as Record<string, unknown>;

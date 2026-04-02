@@ -7,6 +7,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+if (!SUPABASE_URL) throw new Error("Missing SUPABASE_URL env var");
+if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY env var");
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 // Limits
@@ -154,9 +157,7 @@ Deno.serve(async (req: Request) => {
   for (const install of installUpserts.values()) {
     await supabase
       .from("installations")
-      .upsert(install, { onConflict: "installation_id" })
-      .select()
-      .maybeSingle();
+      .upsert(install, { onConflict: "installation_id" });
   }
 
   return new Response(JSON.stringify({ inserted: validRows.length }), {
