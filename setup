@@ -481,7 +481,15 @@ install_hooks() {
   # Ensure hooks object exists
   jq 'if .hooks == null then .hooks = {} else . end' "$tmp_file" > "${tmp_file}.2" && mv "${tmp_file}.2" "$tmp_file"
 
-  # Add each hook (idempotent — skips if command already present)
+  # Remove any existing Orchestra hooks (from previous install paths) before adding new ones.
+  # Matches any hook command containing "orchestra-" to catch all Orchestra hooks regardless of path.
+  jq '
+    .hooks |= with_entries(
+      .value |= map(select(.hooks | all(.command | test("orchestra-") | not)))
+    )
+  ' "$tmp_file" > "${tmp_file}.2" && mv "${tmp_file}.2" "$tmp_file"
+
+  # Add each hook (clean slate after removal above)
   local hook_keys=(
     "SessionStart|startup|resume|orchestra-session-start.sh"
     "SessionStart|compact|orchestra-post-compact.sh"
