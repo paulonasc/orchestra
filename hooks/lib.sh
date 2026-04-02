@@ -1,6 +1,11 @@
 #!/bin/bash
 # Shared utilities for Orchestra hooks
 
+# Ensure global state directory exists — single choke point for all hooks.
+# Every hook sources lib.sh, so this runs before any state access.
+ORCHESTRA_STATE_DIR="${ORCHESTRA_STATE_DIR:-$HOME/.orchestra-state}"
+mkdir -p "$ORCHESTRA_STATE_DIR"
+
 find_orchestra_root() {
   local dir
   dir="$(pwd)"
