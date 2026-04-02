@@ -358,12 +358,18 @@ cmd_link() {
   # Install hooks in repo's .claude/settings.json
   install_hooks "$repo_path"
 
-  # Copy SKILL.md into repo's .claude/skills/o/ (template bin path)
-  mkdir -p "$repo_path/.claude/skills/o"
+  # Copy skill pack into repo's .claude/skills/o/
+  mkdir -p "$repo_path/.claude/skills/o/commands"
+  mkdir -p "$repo_path/.claude/skills/o/reference"
+  # Router SKILL.md (with path substitution)
   sed -e "s|__ORCHESTRA_BIN__|${ORCHESTRA_DIR}/bin|g" \
       -e "s|__ORCHESTRA_DIR__|${ORCHESTRA_DIR}|g" \
     "$ORCHESTRA_DIR/SKILL.md" > "$repo_path/.claude/skills/o/SKILL.md"
-  echo "  Installed skill pack to .claude/skills/o/"
+  # Command files (subcommand instructions)
+  cp "$ORCHESTRA_DIR/commands/"*.md "$repo_path/.claude/skills/o/commands/" 2>/dev/null || true
+  # Reference files (shared docs)
+  cp "$ORCHESTRA_DIR/reference/"*.md "$repo_path/.claude/skills/o/reference/" 2>/dev/null || true
+  echo "  Installed skill pack to .claude/skills/o/ (router + commands/ + reference/)"
 
   # Install .claude/rules/orchestra.md — survives compaction, separate from CLAUDE.md.
   # This is the strongest persistence mechanism: Claude Code injects rules files
