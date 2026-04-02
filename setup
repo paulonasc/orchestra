@@ -16,6 +16,37 @@ bold()   { printf "${BOLD}%s${RESET}\n" "$1"; }
 ORCHESTRA_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOKS_DIR="$ORCHESTRA_DIR/hooks"
 
+# ─── Install state detection ─────────────────────────────────
+# Detect fresh install vs upgrade vs current
+detect_first_run() {
+  local version_marker="$HOME/.orchestra-state/.version"
+  local current_version
+  current_version="$(cat "$ORCHESTRA_DIR/VERSION" 2>/dev/null | tr -d '[:space:]')"
+
+  if [ ! -f "$version_marker" ]; then
+    echo "fresh"
+  elif [ "$(cat "$version_marker" 2>/dev/null | tr -d '[:space:]')" != "$current_version" ]; then
+    echo "upgrade"
+  else
+    echo "current"
+  fi
+}
+
+# Write version marker after successful install/link
+stamp_version() {
+  mkdir -p "$HOME/.orchestra-state"
+  cat "$ORCHESTRA_DIR/VERSION" 2>/dev/null | tr -d '[:space:]' > "$HOME/.orchestra-state/.version"
+}
+
+# Detect install type: git (can pull) or vendored (needs clone+swap)
+detect_install_type() {
+  if [ -d "$ORCHESTRA_DIR/.git" ]; then
+    echo "git"
+  else
+    echo "vendored"
+  fi
+}
+
 # --- Resolve path (expand ~ and make absolute) ---
 resolve_path() {
   local p="${1/#\~/$HOME}"
@@ -32,6 +63,7 @@ Usage:
   ./setup init [path]          Create .orchestra/ at path (default: cwd)
   ./setup link <repo> [orch]   Link a repo to an .orchestra/ directory
   ./setup sync [orch]          Re-link all known repos (after update)
+  ./setup migrate              Switch between global and vendored install
   ./setup help                 Show this message
 
 Examples:
@@ -412,6 +444,8 @@ RULESEOF
     echo "  Registered in linked-repos manifest"
   fi
 
+  stamp_version
+
   echo ""
   green "Linked! Open Claude Code in $(basename "$repo_path") and type /o"
 }
@@ -566,6 +600,53 @@ cmd_install() {
   echo "This will set up Orchestra for one of your projects."
   echo ""
 
+  # ─── Install type choice (first-run only) ─────────────────
+  local run_state
+  run_state="$(detect_first_run)"
+
+  if [ "$run_state" = "fresh" ]; then
+    echo ""
+    bold "How do you want to install Orchestra?"
+    echo ""
+    echo "  A) Global — Orchestra stays at $ORCHESTRA_DIR, works across all your projects"
+    echo "  B) Per-project — copy Orchestra into your project (teammates get it on clone)"
+    echo ""
+    yellow "  RECOMMENDATION: Choose A for most users."
+    echo ""
+    printf "  Your choice [A/b]: "
+    read -r install_choice
+    install_choice="${install_choice:-A}"
+
+    case "$install_choice" in
+      [bB])
+        echo ""
+        printf "  Project path to vendor into: "
+        read -r vendor_target
+        vendor_target="${vendor_target/#\~/$HOME}"
+        if [ ! -d "$vendor_target" ]; then
+          red "Directory not found: $vendor_target"
+          exit 1
+        fi
+        vendor_target="$(cd "$vendor_target" && pwd)"
+
+        local vendor_dest="$vendor_target/.claude/skills/orchestra"
+        mkdir -p "$(dirname "$vendor_dest")"
+        cp -Rf "$ORCHESTRA_DIR" "$vendor_dest"
+        rm -rf "$vendor_dest/.git"
+        green "  Vendored Orchestra to $vendor_dest"
+        echo ""
+
+        # Switch to vendored copy for the rest of setup
+        ORCHESTRA_DIR="$vendor_dest"
+        ;;
+    esac
+  elif [ "$run_state" = "upgrade" ]; then
+    local old_ver new_ver
+    old_ver="$(cat "$HOME/.orchestra-state/.version" 2>/dev/null | tr -d '[:space:]')"
+    new_ver="$(cat "$ORCHESTRA_DIR/VERSION" 2>/dev/null | tr -d '[:space:]')"
+    green "  Orchestra updated: v$old_ver → v$new_ver"
+  fi
+
   printf "What project directory do you want to coordinate?\n"
   printf "(Enter path, or . for current directory): "
   read -r project_path
@@ -617,6 +698,32 @@ cmd_install() {
 }
 
 # ============================================================
+# MIGRATE — switch between global and vendored install
+# ============================================================
+cmd_migrate() {
+  local install_type
+  install_type="$(detect_install_type)"
+
+  echo ""
+  bold "Current install: $install_type (at $ORCHESTRA_DIR)"
+  echo ""
+
+  if [ "$install_type" = "git" ]; then
+    echo "  To switch to vendored (per-project):"
+    echo "    1. cp -Rf $ORCHESTRA_DIR /path/to/project/.claude/skills/orchestra"
+    echo "    2. rm -rf /path/to/project/.claude/skills/orchestra/.git"
+    echo "    3. cd /path/to/project/.claude/skills/orchestra && ./setup link /path/to/project"
+  else
+    echo "  To switch to global (git-based):"
+    echo "    1. git clone https://github.com/paulonasc/orchestra.git ~/orchestra"
+    echo "    2. cd ~/orchestra && ./setup link /path/to/your/project"
+    echo "    3. Remove the vendored copy: rm -rf $ORCHESTRA_DIR"
+  fi
+  echo ""
+  echo "  Your .orchestra/ state directory is NOT affected — threads, decisions, memory are safe."
+}
+
+# ============================================================
 # Main — route subcommand
 # ============================================================
 case "${1:-help}" in
@@ -624,6 +731,7 @@ case "${1:-help}" in
   init)  shift; cmd_init "${1:-}" ;;
   link)  shift; cmd_link "$@" ;;
   sync)  shift; cmd_sync "${1:-}" ;;
+  migrate) shift; cmd_migrate ;;
   help|-h|--help) usage ;;
   *)
     red "Unknown command: $1"
