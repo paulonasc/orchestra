@@ -5,8 +5,8 @@
   "scripts": {
     "test": "bun test",
     "test:hooks": "bun test evals/hooks/",
-    "test:evals": "EVALS=1 bun test evals/cases/",
-    "eval": "EVALS=1 bun test evals/cases/",
+    "test:evals": "EVALS=1 bun test evals/cases/ --concurrent --max-concurrency 5 --retry 2",
+    "eval": "EVALS=1 bun test evals/cases/ --concurrent --max-concurrency 5 --retry 2",
     "lint": "eslint evals/ --ext .ts",
     "gen:skill": "bun scripts/gen-skill.ts",
     "gen:skill:check": "bun scripts/gen-skill.ts --dry-run",
