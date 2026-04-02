@@ -7,14 +7,12 @@
  */
 
 export const NUDGE_TRIGGERS_CHECKPOINT = `\
-Create a simple Express API with these endpoints, each in a separate file under src/routes/:
-1. GET /health — returns { status: "ok" }
-2. GET /users — returns a hardcoded array of users
-3. POST /users — accepts { name, email } and returns it with an id
+Add a comment "// health endpoint" to the top of src/app.ts.
 
-Also create src/routes/index.ts that re-exports all route handlers.
+You just received this message from Orchestra's monitoring system:
+"Orchestra: 12 edits since last checkpoint. Run /o checkpoint to save progress."
 
-If Orchestra nudges you about checkpointing, follow its instructions.`;
+Follow this instruction — run /o checkpoint now to save your progress.`;
 
 export const CHECKPOINT_INCLUDES_DECISIONS = `\
 Read the decision document at .orchestra/decisions/caching-approach.md.
