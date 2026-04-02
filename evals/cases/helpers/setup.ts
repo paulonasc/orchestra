@@ -4,9 +4,13 @@
  * Creates isolated working directories with a realistic .orchestra/ structure,
  * installed SKILL.md, hooks, and sample source files. Each test gets its own
  * temp dir that is cleaned up after.
+ *
+ * IMPORTANT: This calls the REAL setup script (init + link) so that routing rules,
+ * hooks, SKILL.md, and rules/ are never hand-duplicated here. If setup changes,
+ * evals automatically pick up the new behavior.
  */
 
-import { mkdtemp, rm, mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -28,8 +32,9 @@ export interface TestWorkDir {
  * - .orchestra.link pointing to the local .orchestra/
  * - Active thread with sample progress
  * - .claude/skills/o/SKILL.md from the real source
- * - .claude/settings.json with PostToolUse hook wired up
- * - CLAUDE.md with simplified Orchestra rules
+ * - .claude/settings.json with hooks wired up
+ * - CLAUDE.md with Orchestra rules
+ * - .claude/rules/orchestra.md (compaction-safe routing)
  * - git init + initial commit
  * - Sample source files under src/
  */
@@ -38,237 +43,7 @@ export async function createTestWorkDir(name: string): Promise<TestWorkDir> {
   const orchestra = join(root, '.orchestra');
   const hooksDir = join(ORCHESTRA_SRC, 'hooks');
 
-  // Create .orchestra/ directory structure
-  const dirs = [
-    join(orchestra, 'state', 'sessions'),
-    join(orchestra, 'threads', '001-test-feature'),
-    join(orchestra, 'decisions'),
-    join(orchestra, 'memory'),
-    join(orchestra, '.logs'),
-  ];
-  for (const dir of dirs) {
-    await mkdir(dir, { recursive: true });
-  }
-
-  // Discovery README.md — helps agents find .orchestra/ without external context
-  await writeFile(
-    join(orchestra, 'README.md'),
-    `# .orchestra/ — Multi-agent coordination state
-
-This directory is managed by [Orchestra](https://github.com/paulonasc/orchestra).
-
-## For AI agents
-
-If you find this directory, you should use it for coordination state:
-- **Plans** go in \`threads/<active-thread>/plan.md\`
-- **Decisions** go in \`decisions/NNN-slug.md\`
-- **Research** goes in \`threads/<active-thread>/research.md\`
-- **Verification** results go in \`threads/<active-thread>/verification.md\`
-- Check \`state/active-thread.md\` to find the current active thread.
-
-## Structure
-
-\`\`\`
-.orchestra/
-├── MEMORY.md           # permanent project memory
-├── state/
-│   └── active-thread.md  # current thread name
-├── threads/            # per-thread workspaces
-│   └── NNN-slug/
-│       ├── plan.md
-│       ├── spec.md
-│       ├── progress.yaml
-│       └── verification.md
-├── decisions/          # architectural decision records
-└── memory/             # daily logs
-\`\`\`
-
-Run \`/o\` in Claude Code for the full dashboard.
-`,
-  );
-
-  // .orchestra.link so hooks can find the root
-  await writeFile(join(root, '.orchestra.link'), `root: ${orchestra}\n`);
-
-  // Active thread
-  await writeFile(
-    join(orchestra, 'state', 'active-thread.md'),
-    '001-test-feature\n',
-  );
-
-  // Sample progress.yaml
-  await writeFile(
-    join(orchestra, 'threads', '001-test-feature', 'progress.yaml'),
-    `milestones:
-  - name: M0 Setup
-    items:
-      - name: Project scaffold
-        status: done
-      - name: CI/CD pipeline
-        status: done
-      - name: Dev environment
-        status: in-progress
-  - name: M1 Core Features
-    items:
-      - name: User endpoints
-        status: pending
-      - name: Auth middleware
-        status: pending
-      - name: Input validation
-        status: pending
-`,
-  );
-
-  // Sample plan.md
-  await writeFile(
-    join(orchestra, 'threads', '001-test-feature', 'plan.md'),
-    `# Plan: Test Feature
-
-## M0 - Setup
-1. Project scaffold
-2. CI/CD pipeline
-3. Dev environment
-
-## M1 - Core Features
-4. User endpoints
-5. Auth middleware
-6. Input validation
-`,
-  );
-
-  // Install SKILL.md
-  const skillDir = join(root, '.claude', 'skills', 'o');
-  await mkdir(skillDir, { recursive: true });
-
-  const rawSkill = await readFile(join(ORCHESTRA_SRC, 'SKILL.md'), 'utf-8');
-  const installedSkill = rawSkill
-    .replace(/__ORCHESTRA_BIN__/g, join(ORCHESTRA_SRC, 'bin'))
-    .replace(/__ORCHESTRA_DIR__/g, ORCHESTRA_SRC);
-  await writeFile(join(skillDir, 'SKILL.md'), installedSkill);
-
-  // Copy command files (subcommand instructions)
-  const commandsDir = join(skillDir, 'commands');
-  await mkdir(commandsDir, { recursive: true });
-  const commandFiles = ['dashboard.md', 'checkpoint.md', 'close.md', 'import.md', 'docs.md', 'heartbeat.md', 'list.md', 'update.md'];
-  for (const file of commandFiles) {
-    const src = join(ORCHESTRA_SRC, 'commands', file);
-    try {
-      const content = await readFile(src, 'utf-8');
-      await writeFile(join(commandsDir, file), content);
-    } catch {
-      // File may not exist in older versions — skip silently
-    }
-  }
-
-  // Copy reference files (shared docs)
-  const referenceDir = join(skillDir, 'reference');
-  await mkdir(referenceDir, { recursive: true });
-  const referenceFiles = ['memory.md', 'threads.md', 'verification.md', 'formats.md'];
-  for (const file of referenceFiles) {
-    const src = join(ORCHESTRA_SRC, 'reference', file);
-    try {
-      const content = await readFile(src, 'utf-8');
-      await writeFile(join(referenceDir, file), content);
-    } catch {
-      // File may not exist in older versions — skip silently
-    }
-  }
-
-  // Install .claude/settings.json with hooks (including PostToolUse nudge)
-  const settings = {
-    permissions: {
-      allow: ['Bash(*)', 'Read(*)', 'Edit(*)', 'Write(*)', 'Skill(*)'],
-    },
-    hooks: {
-      PostToolUse: [
-        {
-          matcher: 'Edit|Write',
-          hooks: [
-            {
-              type: 'command',
-              command: `bash ${hooksDir}/orchestra-post-tool-nudge.sh`,
-            },
-          ],
-        },
-      ],
-      SessionStart: [
-        {
-          matcher: 'startup|resume',
-          hooks: [
-            {
-              type: 'command',
-              command: `bash ${hooksDir}/orchestra-session-start.sh`,
-            },
-          ],
-        },
-        {
-          matcher: 'compact',
-          hooks: [
-            {
-              type: 'command',
-              command: `bash ${hooksDir}/orchestra-post-compact.sh`,
-            },
-          ],
-        },
-      ],
-      PreCompact: [
-        {
-          matcher: '',
-          hooks: [
-            {
-              type: 'command',
-              command: `bash ${hooksDir}/orchestra-pre-compact.sh`,
-            },
-          ],
-        },
-      ],
-    },
-  };
-  await writeFile(
-    join(root, '.claude', 'settings.json'),
-    JSON.stringify(settings, null, 2),
-  );
-
-  // CLAUDE.md with Orchestra routing rules (must match setup's orchestra_rules_block())
-  await writeFile(
-    join(root, 'CLAUDE.md'),
-    `# Project Rules
-
-## Orchestra
-
-This repo uses Orchestra for multi-agent coordination. State lives in \`.orchestra/\`.
-
-When the user's request matches a pattern below, ALWAYS act on it BEFORE responding directly:
-
-- User says "done", "looks good", "that's working", "all set", "that's all", "nice work" → run \`/o checkpoint\` BEFORE responding
-- User says "merged", "shipped", "deployed" → run \`/o close\`
-- User says "plan this", "write a plan", "document the plan" → write to \`.orchestra/threads/<active-thread>/plan.md\`
-- User says "record this decision", "we decided", "let's go with" → write to \`.orchestra/decisions/NNN-slug.md\`
-- User mentions test results ("tests passed", "0 failures", "build clean") → update verification.md FIRST, then respond
-- User says "what's the status", "where are we" → run \`/o\`
-
-**Do NOT skip Orchestra writes to answer the user faster.** The write takes 5 seconds. Losing state costs 20 minutes next session.
-`,
-  );
-
-  // .claude/rules/orchestra.md — strongest persistence layer (survives compaction)
-  const rulesDir = join(root, '.claude', 'rules');
-  await mkdir(rulesDir, { recursive: true });
-  await writeFile(
-    join(rulesDir, 'orchestra.md'),
-    `This project uses Orchestra for coordination. State lives in .orchestra/.
-
-MANDATORY: When the user signals completion ("done", "looks good", "that's working",
-"all set", "that's all", "nice work"), invoke /o checkpoint BEFORE responding.
-This is your LAST tool call before any text response. State is lost if you skip this.
-
-Plans go in .orchestra/threads/<thread>/plan.md.
-Check .orchestra/state/active-thread.md for the active thread name.
-Decisions go in .orchestra/decisions/NNN-slug.md.
-`,
-  );
-
-  // Sample source files
+  // --- Sample source files (eval-specific) ---
   const srcDir = join(root, 'src');
   await mkdir(srcDir, { recursive: true });
 
@@ -338,32 +113,96 @@ export function generateId(): string {
     ),
   );
 
-  // .gitignore — the descriptive comment acts as a breadcrumb for agents
-  // that explore the repo without CLAUDE.md or SKILL.md context.
-  await writeFile(
-    join(root, '.gitignore'),
-    `.orchestra.link
-# Orchestra — multi-agent coordination (plans, decisions, research go here)
-.orchestra/
-node_modules/
-dist/
-`,
-  );
-
-  // git init + initial commit
+  // --- git init + initial commit (must happen BEFORE setup init) ---
   const exec = Bun.spawnSync;
+  const gitEnv = {
+    ...process.env,
+    GIT_AUTHOR_NAME: 'Test',
+    GIT_AUTHOR_EMAIL: 'test@test.com',
+    GIT_COMMITTER_NAME: 'Test',
+    GIT_COMMITTER_EMAIL: 'test@test.com',
+  };
   exec(['git', 'init'], { cwd: root });
   exec(['git', 'add', '-A'], { cwd: root });
   exec(['git', 'commit', '-m', 'Initial commit', '--allow-empty'], {
     cwd: root,
-    env: {
-      ...process.env,
-      GIT_AUTHOR_NAME: 'Test',
-      GIT_AUTHOR_EMAIL: 'test@test.com',
-      GIT_COMMITTER_NAME: 'Test',
-      GIT_COMMITTER_EMAIL: 'test@test.com',
-    },
+    env: gitEnv,
   });
+
+  // --- Use the REAL setup to install Orchestra — single source of truth. ---
+  // ORCHESTRA_STATE_DIR sandboxes state writes to the test dir (not real ~/.orchestra-state/).
+  const testStateDir = join(root, '.test-orchestra-state');
+  const setupScript = join(ORCHESTRA_SRC, 'setup');
+
+  // Run setup init (creates .orchestra/ with all state files, README, git repo)
+  const initResult = Bun.spawnSync(
+    ['bash', setupScript, 'init', root],
+    { cwd: ORCHESTRA_SRC, env: { ...process.env, ORCHESTRA_STATE_DIR: testStateDir } },
+  );
+  if (initResult.exitCode !== 0) {
+    throw new Error(`setup init failed: ${initResult.stderr.toString()}`);
+  }
+
+  // Run setup link (installs SKILL.md, commands/, reference/, hooks, CLAUDE.md, rules)
+  const linkResult = Bun.spawnSync(
+    ['bash', setupScript, 'link', root],
+    { cwd: ORCHESTRA_SRC, env: { ...process.env, ORCHESTRA_STATE_DIR: testStateDir } },
+  );
+  if (linkResult.exitCode !== 0) {
+    throw new Error(`setup link failed: ${linkResult.stderr.toString()}`);
+  }
+
+  // --- Eval-specific state (on top of what setup created) ---
+
+  // Create active thread directory
+  const threadDir = join(orchestra, 'threads', '001-test-feature');
+  await mkdir(threadDir, { recursive: true });
+
+  // Active thread pointer
+  await writeFile(
+    join(orchestra, 'state', 'active-thread.md'),
+    '001-test-feature\n',
+  );
+
+  // Sample progress.yaml
+  await writeFile(
+    join(threadDir, 'progress.yaml'),
+    `milestones:
+  - name: M0 Setup
+    items:
+      - name: Project scaffold
+        status: done
+      - name: CI/CD pipeline
+        status: done
+      - name: Dev environment
+        status: in-progress
+  - name: M1 Core Features
+    items:
+      - name: User endpoints
+        status: pending
+      - name: Auth middleware
+        status: pending
+      - name: Input validation
+        status: pending
+`,
+  );
+
+  // Sample plan.md
+  await writeFile(
+    join(threadDir, 'plan.md'),
+    `# Plan: Test Feature
+
+## M0 - Setup
+1. Project scaffold
+2. CI/CD pipeline
+3. Dev environment
+
+## M1 - Core Features
+4. User endpoints
+5. Auth middleware
+6. Input validation
+`,
+  );
 
   return { root, orchestra, hooksDir };
 }
