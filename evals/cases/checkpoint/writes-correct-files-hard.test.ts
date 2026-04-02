@@ -17,8 +17,8 @@
  */
 
 import { expect } from 'bun:test';
-import { defineEvalSuite } from './helpers/harness';
-import { CHECKPOINT_WRITES_CORRECT_FILES_HARD } from './helpers/prompts';
+import { defineEvalSuite } from '../helpers/harness';
+import { CHECKPOINT_WRITES_CORRECT_FILES_HARD } from '../helpers/prompts';
 
 defineEvalSuite('checkpoint-writes-correct-files-hard', [
   {

@@ -15,8 +15,8 @@
  */
 
 import { expect } from 'bun:test';
-import { defineEvalSuite, type EvalCase } from './helpers/harness';
-import type { TestWorkDir } from './helpers/setup';
+import { defineEvalSuite, type EvalCase } from '../helpers/harness';
+import type { TestWorkDir } from '../helpers/setup';
 import { readdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 

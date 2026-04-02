@@ -11,8 +11,8 @@
  */
 
 import { expect } from 'bun:test';
-import { defineEvalSuite } from './helpers/harness';
-import { DECISIONS_RECORDED_AFTER_REVIEW } from './helpers/prompts';
+import { defineEvalSuite } from '../helpers/harness';
+import { DECISIONS_RECORDED_AFTER_REVIEW } from '../helpers/prompts';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 

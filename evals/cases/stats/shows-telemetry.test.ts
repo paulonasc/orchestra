@@ -11,8 +11,8 @@
  */
 
 import { expect } from 'bun:test';
-import { defineEvalSuite } from './helpers/harness';
-import { STATS_SHOWS_TELEMETRY } from './helpers/prompts';
+import { defineEvalSuite } from '../helpers/harness';
+import { STATS_SHOWS_TELEMETRY } from '../helpers/prompts';
 
 defineEvalSuite('stats-shows-telemetry', [
   {

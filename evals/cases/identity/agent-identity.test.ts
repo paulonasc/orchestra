@@ -15,8 +15,8 @@
  */
 
 import { expect } from 'bun:test';
-import { defineEvalSuite } from './helpers/harness';
-import { AGENT_KNOWS_ORCHESTRA } from './helpers/prompts';
+import { defineEvalSuite } from '../helpers/harness';
+import { AGENT_KNOWS_ORCHESTRA } from '../helpers/prompts';
 
 defineEvalSuite('agent-identity-orchestra', [
   {

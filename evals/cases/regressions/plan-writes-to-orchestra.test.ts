@@ -11,8 +11,8 @@
  */
 
 import { expect } from 'bun:test';
-import { defineEvalSuite } from './helpers/harness';
-import { PLAN_WRITES_TO_ORCHESTRA } from './helpers/prompts';
+import { defineEvalSuite } from '../helpers/harness';
+import { PLAN_WRITES_TO_ORCHESTRA } from '../helpers/prompts';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 

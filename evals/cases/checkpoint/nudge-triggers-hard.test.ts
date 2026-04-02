@@ -18,8 +18,8 @@
  */
 
 import { expect } from 'bun:test';
-import { defineEvalSuite } from './helpers/harness';
-import { NUDGE_TRIGGERS_CHECKPOINT_HARD } from './helpers/prompts';
+import { defineEvalSuite } from '../helpers/harness';
+import { NUDGE_TRIGGERS_CHECKPOINT_HARD } from '../helpers/prompts';
 
 defineEvalSuite('nudge-triggers-checkpoint-hard', [
   {

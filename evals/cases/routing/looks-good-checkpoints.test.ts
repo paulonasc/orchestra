@@ -9,9 +9,9 @@
  */
 
 import { expect } from 'bun:test';
-import { defineEvalSuite } from './helpers/harness';
-import { writeLoggerMiddlewareFixture } from './helpers/fixtures';
-import { ROUTING_LOOKS_GOOD_CHECKPOINTS } from './helpers/prompts';
+import { defineEvalSuite } from '../helpers/harness';
+import { writeLoggerMiddlewareFixture } from '../helpers/fixtures';
+import { ROUTING_LOOKS_GOOD_CHECKPOINTS } from '../helpers/prompts';
 
 defineEvalSuite('routing-looks-good-checkpoints', [
   {
