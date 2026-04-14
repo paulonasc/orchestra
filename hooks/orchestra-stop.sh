@@ -10,7 +10,7 @@ source "$SCRIPT_DIR/lib.sh"
 INPUT="$(cat 2>/dev/null)"
 
 # Prevent recursion
-if echo "$INPUT" | grep -q '"stop_hook_active"' 2>/dev/null; then
+if echo "$INPUT" | grep -q '"stop_hook_active": *true' 2>/dev/null; then
   exit 0
 fi
 
@@ -29,8 +29,17 @@ echo "## $TIME — Session ended ($WORKTREE_NAME)" >> "$ORCH_ROOT/memory/$TODAY.
 
 # ─── Telemetry: session end ──────────────────────────────────
 if [ -n "$ORCH_ROOT" ]; then
-  _FINAL_EDITS=$(cat "$ORCH_ROOT/.logs/edit-count-$(get_session_id)" 2>/dev/null || echo "0")
-  echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"hook_stop\",\"edit_count\":$_FINAL_EDITS}" >> "$ORCH_ROOT/.logs/telemetry.jsonl" 2>/dev/null || true
+  _SESSION_ID="$(get_session_id)"
+  _FINAL_EDITS=$(cat "$ORCH_ROOT/.logs/edit-count-$_SESSION_ID" 2>/dev/null || echo "0")
+  _START_FILE="$ORCH_ROOT/.logs/session-start-$_SESSION_ID"
+  _START_TS="$(cat "$_START_FILE" 2>/dev/null || echo "")"
+  if [ -n "$_START_TS" ]; then
+    _DURATION_S=$(( $(date +%s) - _START_TS ))
+  else
+    _DURATION_S="null"
+  fi
+  echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"hook_stop\",\"session_id\":\"$_SESSION_ID\",\"edit_count\":$_FINAL_EDITS,\"duration_s\":$_DURATION_S}" >> "$ORCH_ROOT/.logs/telemetry.jsonl" 2>/dev/null || true
+  rm -f "$_START_FILE" 2>/dev/null || true
 fi
 
 # ─── Trigger background telemetry sync ──────────────────────────

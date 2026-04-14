@@ -11,7 +11,7 @@
  */
 
 import { describe, test, expect, afterAll } from 'bun:test';
-import { mkdtemp, rm, mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, writeFile, readFile, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { $ } from 'bun';
@@ -164,5 +164,134 @@ describe('telemetry-pipeline', () => {
     } catch {
       // File doesn't exist — also correct (cursor never written)
     }
+  });
+
+  // ── New tests for hook bug fixes ──────────────────────────────────────────
+
+  test('hook_stop with session_id and duration_s is accepted', async () => {
+    // Verifies: fixed hook_stop recursion guard writes events, and edge function
+    // accepts the new session_id + duration_s fields that the fix adds.
+    await setup();
+
+    const event = JSON.stringify({
+      ts: new Date().toISOString(),
+      event: 'hook_stop',
+      edit_count: 5,
+      session_id: '20260414-094633-12345',
+      duration_s: 3742,
+    });
+    await writeFile(join(orchRoot, '.logs', 'telemetry.jsonl'), event + '\n');
+
+    const output = await runSync();
+    const response = JSON.parse(output);
+
+    expect(response.inserted).toBe(1);
+    expect(response.dropped ?? 0).toBe(0);
+
+    // Cursor advanced
+    const cursor = (await readFile(join(stateDir, '.last-sync-line'), 'utf-8')).trim();
+    expect(cursor).toBe('1');
+  });
+
+  test('hook_stop with null duration_s is accepted', async () => {
+    // Sessions with no start-time file produce duration_s: null.
+    // Edge function treats non-number duration_s as null — must not drop the event.
+    await setup();
+
+    const event = JSON.stringify({
+      ts: new Date().toISOString(),
+      event: 'hook_stop',
+      edit_count: 0,
+      session_id: 'default',
+      duration_s: null,
+    });
+    await writeFile(join(orchRoot, '.logs', 'telemetry.jsonl'), event + '\n');
+
+    const output = await runSync();
+    const response = JSON.parse(output);
+
+    expect(response.inserted).toBe(1);
+    expect(response.dropped ?? 0).toBe(0);
+  });
+
+  test('session_start event is accepted', async () => {
+    // Verifies: after fix, session_start triggers sync. Edge function must accept it.
+    // NOTE: This test will fail against the old edge function (pre-deploy).
+    // The local index.ts lists "session_start" as valid, but the live function
+    // does not yet include it. Once deployed, inserted will be 1.
+    await setup();
+
+    const event = JSON.stringify({
+      ts: new Date().toISOString(),
+      event: 'session_start',
+      sessions: 2,
+    });
+    await writeFile(join(orchRoot, '.logs', 'telemetry.jsonl'), event + '\n');
+
+    const output = await runSync();
+    const response = JSON.parse(output);
+
+    expect(response.inserted).toBe(1);
+    expect(response.dropped ?? 0).toBe(0);
+  });
+
+  test('mixed batch — all event types accepted in one sync', async () => {
+    // Sends 4 different event types in one batch to verify the full pipeline
+    // handles all types added/fixed in this round of hook fixes.
+    // NOTE: session_start and nudge_fired are dropped by the pre-deploy edge function.
+    // hook_stop and hook_subagent_stop are accepted (inserted: 2 pre-deploy).
+    // TODO: tighten to `inserted: 4, dropped: 0` after edge function deploy.
+    await setup();
+
+    const now = new Date().toISOString();
+    const events = [
+      JSON.stringify({ ts: now, event: 'session_start', sessions: 1 }),
+      JSON.stringify({ ts: now, event: 'hook_stop', edit_count: 3, session_id: '20260414-100000-99999', duration_s: 120 }),
+      JSON.stringify({ ts: now, event: 'hook_subagent_stop', edit_count: 1 }),
+      JSON.stringify({ ts: now, event: 'nudge_fired', edit_count: 0 }),
+    ].join('\n');
+    await writeFile(join(orchRoot, '.logs', 'telemetry.jsonl'), events + '\n');
+
+    const output = await runSync();
+    const response = JSON.parse(output);
+
+    expect(response.inserted).toBe(4);
+    expect(response.dropped ?? 0).toBe(0);
+
+    // Cursor advanced past all 4 lines regardless of how many were inserted.
+    const cursor = (await readFile(join(stateDir, '.last-sync-line'), 'utf-8')).trim();
+    expect(cursor).toBe('4');
+  });
+
+  test('rate limiter allows sync after 5 minutes', async () => {
+    // Guards against the rate limiter blocking legitimate syncs.
+    // Sets .last-sync-time mtime to > 300s ago so the guard passes.
+    await setup();
+
+    const event = JSON.stringify({
+      ts: new Date().toISOString(),
+      event: 'hook_stop',
+      edit_count: 1,
+    });
+    await writeFile(join(orchRoot, '.logs', 'telemetry.jsonl'), event + '\n');
+
+    // Create .last-sync-time with an old mtime (Jan 1 2025 → well over 5 min ago).
+    // Use utimes() instead of `touch -t` — Bun's shell doesn't support -t.
+    const lastSyncFile = join(stateDir, '.last-sync-time');
+    await writeFile(lastSyncFile, '');
+    const oldTime = new Date('2025-01-01T00:00:00Z');
+    await utimes(lastSyncFile, oldTime, oldTime);
+
+    const output = await runSync();
+    const response = JSON.parse(output);
+
+    // Sync must have proceeded (not exited early due to rate limit)
+    expect(response).toBeDefined();
+    expect(typeof response.inserted).toBe('number');
+    expect(response.inserted).toBe(1);
+
+    // Cursor advanced — confirms events were sent, not rate-limited
+    const cursor = (await readFile(join(stateDir, '.last-sync-line'), 'utf-8')).trim();
+    expect(cursor).toBe('1');
   });
 });

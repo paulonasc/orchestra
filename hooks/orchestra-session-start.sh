@@ -66,6 +66,7 @@ SESSEOF
 # ─── Telemetry: session start ─────────────────────────────────
 _TEL_DIR="$ORCH_ROOT/.logs"
 mkdir -p "$_TEL_DIR" 2>/dev/null || true
+echo "$(date +%s)" > "$_TEL_DIR/session-start-$(get_session_id)"
 _SESSION_COUNT=$(ls "$ORCH_ROOT/state/sessions/"*.md 2>/dev/null | wc -l | tr -d ' ')
 echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"session_start\",\"sessions\":$_SESSION_COUNT}" >> "$_TEL_DIR/telemetry.jsonl" 2>/dev/null || true
 
@@ -213,5 +214,11 @@ echo "- When you discover a gotcha or workaround: add it to your session file's 
 echo "- When you change behavior that's documented (API, commands, config, deploy): update the docs NOW, not later"
 echo "- When the user says 'merged/shipped/deployed' or all items are done: prompt to /o close the thread"
 echo ""
+
+# Flush any pending events from the previous session
+_TEL_TIER=$("$SCRIPT_DIR/../bin/orchestra-config" get telemetry 2>/dev/null || echo "off")
+if [ "$_TEL_TIER" != "off" ] && [ -n "$_TEL_TIER" ]; then
+  "$SCRIPT_DIR/../bin/orchestra-telemetry-sync" 2>/dev/null &
+fi
 
 exit 0
