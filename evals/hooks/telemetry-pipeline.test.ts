@@ -231,10 +231,8 @@ describe('telemetry-pipeline', () => {
     const output = await runSync();
     const response = JSON.parse(output);
 
-    // Assert sync ran and returned valid JSON either way.
-    expect(response).toBeDefined();
-    expect(typeof response.inserted).toBe('number');
-    // TODO: tighten to `expect(response.inserted).toBe(1)` after edge function deploy.
+    expect(response.inserted).toBe(1);
+    expect(response.dropped ?? 0).toBe(0);
   });
 
   test('mixed batch — all event types accepted in one sync', async () => {
@@ -257,10 +255,8 @@ describe('telemetry-pipeline', () => {
     const output = await runSync();
     const response = JSON.parse(output);
 
-    // Batch was sent; at minimum hook_stop + hook_subagent_stop are accepted.
-    expect(response).toBeDefined();
-    expect(typeof response.inserted).toBe('number');
-    expect(response.inserted).toBeGreaterThanOrEqual(2);
+    expect(response.inserted).toBe(4);
+    expect(response.dropped ?? 0).toBe(0);
 
     // Cursor advanced past all 4 lines regardless of how many were inserted.
     const cursor = (await readFile(join(stateDir, '.last-sync-line'), 'utf-8')).trim();
