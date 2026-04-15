@@ -3,7 +3,7 @@ import tsPlugin from '@typescript-eslint/eslint-plugin';
 
 export default [
   {
-    files: ['evals/**/*.ts'],
+    files: ['tests/**/*.ts', 'evals/**/*.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {

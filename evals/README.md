@@ -6,28 +6,26 @@ Three tiers of tests, one harness, deterministic checks before LLM judges.
 ## Architecture
 
 ```
-  Test Cases (.test.ts)
-       |
-       v
-  Harness (defineEvalSuite)         Hook Unit Tests
-       |                              |
-       v                              v
-  Session Runner (Agent SDK)       Bun.spawn (bash hooks)
-       |                              |
-       v                              v
-  Claude (claude-sonnet-4-6)       stdout assertions
-       |
-       v
-  Assertions
-    1. Deterministic checks (checkSkillInvocation, checkFileWrite)
-    2. LLM Judge (OpenAI gpt-5.4-mini) -- only if deterministic check inconclusive
+tests/                              evals/
+  hooks/      integration/            cases/
+     |              |                   |
+     v              v                   v
+  Bun.spawn    Bun.spawn           Session Runner (Agent SDK)
+  (bash hooks) (bash hooks)             |
+     |              |                   v
+     v              v              Claude (claude-sonnet-4-6)
+  stdout         file/stdout            |
+  assertions     assertions             v
+                                   Assertions
+                                     1. Deterministic checks
+                                     2. LLM Judge (OpenAI)
 ```
 
 ### Three test tiers
 
-1. **Hook unit tests** (`evals/hooks/`). Run the actual bash hook scripts via `Bun.spawn` against a mock `.orchestra/` directory. No LLM. Sub-second. Test hook logic in isolation.
+1. **Hook unit tests** (`tests/hooks/`). Run the actual bash hook scripts via `Bun.spawn` against a mock `.orchestra/` directory. No LLM. Sub-second. Test hook logic in isolation.
 
-2. **Deterministic integration tests** (`evals/cases/`). Run bash hooks or inspect their output with `expect()`. No LLM needed. Example: `session-start-relevant-context.test.ts` runs the session-start hook and asserts that repo-filtered MEMORY.md entries appear (or do not appear) in stdout.
+2. **Deterministic integration tests** (`tests/integration/`). Run bash hooks or inspect their output with `expect()`. No LLM needed. Example: `start-relevant-context.test.ts` runs the session-start hook and asserts that repo-filtered MEMORY.md entries appear (or do not appear) in stdout.
 
 3. **Behavioral evals** (`evals/cases/`, gated by `EVALS=1`). Spawn a real Claude Code agent session via the Agent SDK, then assert on its behavior. Use deterministic transcript checks first, fall back to an LLM judge for fuzzy behavioral questions. Example: did the agent suggest `/o checkpoint` when the user said "looks good"?
 
@@ -69,11 +67,14 @@ The judge (`helpers/judge.ts`) provides two kinds of checks:
 ## Running evals
 
 ```bash
-# Hook unit tests only (fast, no API keys needed)
-bun test evals/hooks/
+# All deterministic tests (no API keys needed)
+bun test tests/
 
-# All deterministic tests including hook tests
-bun test evals/
+# Hook unit tests only
+bun test tests/hooks/
+
+# Deterministic integration tests only
+bun test tests/integration/
 
 # LLM behavioral evals (needs ANTHROPIC auth + OPENAI_API_KEY)
 source .env
@@ -92,8 +93,10 @@ EVAL_JUDGE_MODEL=gpt-5.4-mini EVALS=1 bun test evals/cases/
 EVALS_MODEL=claude-opus-4-6 EVALS=1 bun test evals/cases/
 
 # Using package.json scripts
-bun run test:hooks
-bun run test:evals
+bun run test:hooks        # tests/hooks/ only
+bun run test:integration  # tests/integration/ only
+bun run test              # all of tests/ (hooks + integration)
+bun run test:evals        # evals/cases/ (needs EVALS=1 and API keys)
 ```
 
 Note: without `EVALS=1`, behavioral test suites are skipped via `describe.skip`. Hook unit tests and deterministic integration tests always run.
@@ -172,11 +175,15 @@ The two-tier assertion pattern is important: deterministic checks are faster, ch
 EVALS=1 bun test evals/cases/<category>/my-new-scenario.test.ts
 ```
 
+## Writing a new deterministic integration test
+
+For tests that run bash hooks but don't need an LLM, create `tests/integration/my-test.test.ts`. Use the same `Bun.spawn` pattern as hook tests. These run with `bun test tests/` and need no API keys.
+
 ## Writing a new hook test
 
 Hook tests run the real bash scripts against a mock directory. No LLM, no API keys.
 
-Create `evals/hooks/my-hook.test.ts`:
+Create `tests/hooks/my-hook.test.ts`:
 
 ```typescript
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
@@ -184,7 +191,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-const HOOK_SCRIPT = join(import.meta.dir, '..', '..', 'hooks', 'my-hook.sh');
+const HOOK_SCRIPT = join(import.meta.dir, '..', '..', 'hooks', 'my-hook.sh'); // tests/hooks/ → repo root → hooks/
 
 let tempDir: string;
 let orchRoot: string;
@@ -228,31 +235,35 @@ describe('my-hook', () => {
 ## Directory structure
 
 ```
-evals/
+tests/                          ← deterministic, always run, no API keys
+  hooks/
+    *.test.ts                   # Bash hook unit tests (Bun.spawn, no LLM)
+  integration/
+    *.test.ts                   # Deterministic integration tests (bash hooks, file I/O)
+
+evals/                          ← LLM behavioral, EVALS=1, needs API keys
   helpers/
-    providers.ts        # LLM provider abstraction (OpenAI, Anthropic)
-    session-runner.ts   # Agent SDK wrapper: query() + transcript capture
-    judge.ts            # Deterministic checks + LLM judge
+    providers.ts                # LLM provider abstraction (OpenAI, Anthropic)
+    session-runner.ts           # Agent SDK wrapper: query() + transcript capture
+    judge.ts                    # Deterministic checks + LLM judge
   cases/
     helpers/
-      harness.ts        # defineEvalSuite: test lifecycle + assertion context
-      setup.ts          # createTestWorkDir: full Orchestra installation in tmp
-      fixtures.ts       # Scenario-specific file generators
-      prompts.ts        # All eval prompts as exported constants
-    router/             # Router dispatch tests (3)
-    checkpoint/         # Checkpoint writing, triggers, nudge (8)
-    routing/            # CLAUDE.md routing rules (3)
-    session/            # Compaction, concurrent, context (3)
-    discovery/          # Zero-context, plan routing (2)
-    decisions/          # Recording, implicit (2)
-    verification/       # Updates, implicit (2)
-    regressions/        # Plan routing bugs (2)
-    identity/           # Agent knows Orchestra (1)
-    stats/              # Telemetry command (1)
-  hooks/
-    *.test.ts           # Hook unit tests (no LLM)
+      harness.ts                # defineEvalSuite: test lifecycle + assertion context
+      setup.ts                  # createTestWorkDir: full Orchestra installation in tmp
+      fixtures.ts               # Scenario-specific file generators
+      prompts.ts                # All eval prompts as exported constants
+    router/                     # Router dispatch tests (3)
+    checkpoint/                 # Checkpoint writing, triggers, nudge (8)
+    routing/                    # CLAUDE.md routing rules (3)
+    discovery/                  # Zero-context, plan routing (2)
+    decisions/                  # Recording, implicit (2)
+    verification/               # Updates, implicit (2)
+    regressions/                # Plan routing bugs (2)
+    identity/                   # Agent knows Orchestra (1)
+    stats/                      # Telemetry command (1)
   runs/
-    *.json              # Saved failure transcripts for debugging
+    *.json                      # Saved failure transcripts for debugging
+  README.md                     # This file
 ```
 
 ## Environment variables

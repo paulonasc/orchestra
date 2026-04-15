@@ -13,7 +13,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync, existsSync } from 'fs';
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync, existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -78,7 +78,6 @@ function findStartTimeFile(sessionId?: string): string | null {
     return existsSync(specific) ? specific : null;
   }
 
-  const { readdirSync } = require('fs');
   const files = readdirSync(logsDir).filter((f: string) => f.startsWith('session-start-'));
   return files.length > 0 ? join(logsDir, files[0]) : null;
 }
