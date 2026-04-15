@@ -8,3 +8,5 @@ node_modules/
 evals/runs/
 .claude/settings.json
 .claude/
+# Orchestra — multi-agent coordination (plans, decisions, research go here)
+.orchestra/
