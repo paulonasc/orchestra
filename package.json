@@ -3,11 +3,12 @@
   "version": "0.5.0",
   "private": true,
   "scripts": {
-    "test": "bun test",
-    "test:hooks": "bun test evals/hooks/",
+    "test": "bun test tests/",
+    "test:hooks": "bun test tests/hooks/",
+    "test:integration": "bun test tests/integration/",
     "test:evals": "find evals/cases -name '*.test.ts' | xargs -P5 -I{} sh -c 'EVALS=1 bun test \"$1\" --retry 2 2>&1' _ {}",
     "eval": "find evals/cases -name '*.test.ts' | xargs -P5 -I{} sh -c 'EVALS=1 bun test \"$1\" --retry 2 2>&1' _ {}",
-    "lint": "eslint evals/ --ext .ts",
+    "lint": "eslint tests/ evals/ --ext .ts",
     "gen:skill": "bun scripts/gen-skill.ts",
     "gen:skill:check": "bun scripts/gen-skill.ts --dry-run"
   },
